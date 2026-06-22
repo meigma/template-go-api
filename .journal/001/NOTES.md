@@ -65,3 +65,9 @@ PR: https://github.com/meigma/template-go-api/pull/3 (squash-merge).
 
 Next: goal 2 — draft the temporary target-shape design doc collaboratively
 (framework choice, hexagonal layering, endpoints/config/observability, testing).
+
+## 2026-06-22 09:00 — PR #3 merged
+PR #3 squash-merged into `master` (merge commit `3d1edae`). Goal 1 (referencing
+pass) is fully landed. Local `master` fast-forwarded and now tracks
+`origin/master`; implementation worktree removed; local + remote
+`chore/rename-template-go-api` branches deleted. Proceeding to goal 2 next.
