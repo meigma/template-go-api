@@ -74,8 +74,9 @@ func (m *Metrics) Middleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(wrapped, r)
 
 			route := routePattern(r)
-			m.duration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
-			m.requests.WithLabelValues(r.Method, route, strconv.Itoa(wrapped.Status())).Inc()
+			method := normalizeMethod(r.Method)
+			m.duration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
+			m.requests.WithLabelValues(method, route, strconv.Itoa(wrapped.Status())).Inc()
 		})
 	}
 }
@@ -95,4 +96,21 @@ func routePattern(r *http.Request) string {
 	}
 
 	return "unmatched"
+}
+
+// methodOther is the bucket for unrecognized HTTP method tokens.
+const methodOther = "other"
+
+// normalizeMethod bounds the method label's cardinality. The HTTP server accepts
+// arbitrary method tokens, so any unrecognized method collapses to methodOther to
+// stop scanners from creating an unbounded number of time series.
+func normalizeMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodConnect,
+		http.MethodOptions, http.MethodTrace:
+		return method
+	default:
+		return methodOther
+	}
 }
