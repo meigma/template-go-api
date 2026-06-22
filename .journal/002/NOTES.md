@@ -77,3 +77,34 @@ DELETE_ME refresh for concrete API-server usage now that code has landed.
 Possible refinement noted: service-level logs ("todo created") use the base logger,
 not the request-scoped one, so they lack request_id; a later pass could thread the
 context logger (LoggerFrom) into the service.
+
+## 2026-06-22 15:45 — PR #4 merged
+
+Interactive review on the PR drove four follow-up commits before merge:
+1. `fix`: bounded metrics label cardinality — `route` was already safe (chi pattern,
+   unmatched → "unmatched"), but `method` echoed raw `r.Method`; arbitrary method
+   tokens collapse to "other" now.
+2. `refactor`: split the todo transport into `internal/adapter/http/todoapi`; the
+   generic `internal/adapter/http` is now resource-agnostic (zero `todo` imports)
+   and resources mount via a `Registrar func(huma.API)` seam composed in `app`.
+3. `refactor`: `Readiness []func() error` → named context-aware `ReadinessCheck`
+   (`func(context.Context) error`); `/readyz` threads the request context.
+4. `fix`: RFC 9457 standardization. A verification workflow (5 agents: code audit
+   + live-server probe + synthesis) found Huma errors conformed but every non-Huma
+   surface did not (chi default 404 text/plain, 405 empty body, panic bare 500,
+   timeout bare 504). Added a single problem+json writer; wired mux.NotFound/
+   MethodNotAllowed (405 rebuilds the Allow header by probing routes); moved the
+   panic Recoverer into transport; replaced chi's Timeout with a problem+json 504.
+   /healthz, /readyz, /metrics intentionally excluded (documented in code).
+
+Merged via squash → master `745a9ed`. Remote branch + `feat/api-vertical-slice`
+worktree removed; master updated locally. CI green (ci, Pages, Kusari).
+
+State of the world: master is now a runnable hexagonal Go API server template
+(todo reference slice). TARGET_SHAPE.md slice-1 scope is complete.
+
+Open follow-ups for future slices (all seams already in place): docs render pipeline
+(neoteroi OAD + docs:openapi Moon wiring + drift-guard); CORS/client-IP; authn/authz;
+Postgres adapter + testcontainers; OTel; rate limiting; pagination; API versioning;
+README/DELETE_ME refresh for concrete API usage; thread request-scoped logger into
+the service; optionally richer (named) readiness reporting.
