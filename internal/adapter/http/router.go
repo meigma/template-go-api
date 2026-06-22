@@ -22,7 +22,7 @@ type RouterDeps struct {
 	// RequestTimeout bounds per-request processing in the timeout middleware.
 	RequestTimeout time.Duration
 	// Readiness lists checks evaluated by /readyz; empty means always ready.
-	Readiness []func() error
+	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
 	Register Registrar
 }
@@ -53,7 +53,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	return mux
 }
 
-func mountInfra(mux chi.Router, metrics *observability.Metrics, readiness []func() error) {
+func mountInfra(mux chi.Router, metrics *observability.Metrics, readiness []ReadinessCheck) {
 	mux.Get("/healthz", handleHealthz)
 	mux.Get("/readyz", handleReadyz(readiness))
 	mux.Handle("/metrics", metrics.Handler())

@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,6 +47,47 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 	require.Equal(t, http.StatusOK, metrics.status)
 	assert.Contains(t, metrics.body, "http_requests_total")
 	assert.Contains(t, metrics.body, "go_goroutines")
+}
+
+// TestReadyzReflectsChecks verifies the ReadinessCheck seam: a failing check
+// yields 503, and a passing check yields 200.
+func TestReadyzReflectsChecks(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+
+	tests := []struct {
+		name  string
+		check ReadinessCheck
+		want  int
+	}{
+		{name: "ready", check: func(context.Context) error { return nil }, want: http.StatusOK},
+		{
+			name:  "unavailable",
+			check: func(context.Context) error { return errors.New("down") },
+			want:  http.StatusServiceUnavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := NewRouter(RouterDeps{
+				Logger:         discard,
+				Metrics:        observability.NewMetrics(),
+				Version:        "test",
+				RequestTimeout: testRequestTimeout,
+				Readiness:      []ReadinessCheck{tt.check},
+				Register:       nil,
+			})
+
+			srv := httptest.NewServer(handler)
+			t.Cleanup(srv.Close)
+
+			assert.Equal(t, tt.want, get(t, srv, "/readyz").status)
+		})
+	}
 }
 
 type testResponse struct {

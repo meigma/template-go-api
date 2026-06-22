@@ -1,12 +1,19 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 )
 
 // statusKey is the JSON field name used by the health and readiness responses.
 const statusKey = "status"
+
+// ReadinessCheck reports whether a dependency required to serve traffic is
+// available: it returns nil when ready and a non-nil error otherwise. Checks
+// receive the request context so probes (for example, a database ping) can honor
+// cancellation and deadlines.
+type ReadinessCheck func(ctx context.Context) error
 
 // handleHealthz reports liveness: the process is up and serving.
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -15,10 +22,10 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 
 // handleReadyz reports readiness by evaluating the supplied checks. With no
 // checks (the in-memory slice), the server is always ready.
-func handleReadyz(checks []func() error) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+func handleReadyz(checks []ReadinessCheck) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		for _, check := range checks {
-			if err := check(); err != nil {
+			if err := check(r.Context()); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{statusKey: "unavailable"})
 
 				return
