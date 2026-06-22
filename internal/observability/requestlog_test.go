@@ -37,22 +37,3 @@ func TestRequestLoggerLogsRequestID(t *testing.T) {
 	assert.Contains(t, logged, `"status":418`)
 	assert.Contains(t, logged, "http request")
 }
-
-func TestRecovererConvertsPanicToInternalError(t *testing.T) {
-	t.Parallel()
-
-	var buf bytes.Buffer
-	logger := NewLogger(&buf, slog.LevelError, "json")
-
-	inner := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		panic("boom")
-	})
-	handler := Recoverer(logger)(inner)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Contains(t, buf.String(), "recovered from panic")
-}

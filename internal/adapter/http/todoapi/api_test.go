@@ -124,4 +124,9 @@ func TestTodoAPIFunctional(t *testing.T) {
 
 	resp = doRequest(t, srv, http.MethodPost, "/todos/missing/complete", "")
 	require.Equal(t, http.StatusNotFound, resp.status)
+
+	// A valid path with an unregistered method returns RFC 9457 problem+json.
+	resp = doRequest(t, srv, http.MethodDelete, "/todos", "")
+	require.Equal(t, http.StatusMethodNotAllowed, resp.status)
+	assert.Contains(t, resp.contentType, "application/problem+json")
 }

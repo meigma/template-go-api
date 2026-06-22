@@ -3,6 +3,7 @@ package http
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,19 +28,34 @@ type RouterDeps struct {
 	Register Registrar
 }
 
-// NewRouter assembles the chi router: the core middleware stack, the Huma API
-// with its registered resource operations (which appear in the OpenAPI spec),
-// and the raw infrastructure routes (/healthz, /readyz, /metrics) that bypass it.
+// NewRouter assembles the chi router: the core middleware stack, RFC 9457 error
+// fallbacks, the Huma API with its registered resource operations (which appear
+// in the OpenAPI spec), and the raw infrastructure routes (/healthz, /readyz,
+// /metrics) that bypass the spec.
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := chi.NewMux()
 
 	// Core middleware, outermost first. Deferred seams (insert here in later
 	// slices): authn/authz, CORS, client-IP (RealIP), and rate limiting.
 	mux.Use(middleware.RequestID)
-	mux.Use(observability.Recoverer(deps.Logger))
+	mux.Use(Recoverer(deps.Logger))
 	mux.Use(observability.RequestLogger(deps.Logger))
 	mux.Use(deps.Metrics.Middleware())
-	mux.Use(middleware.Timeout(deps.RequestTimeout))
+	mux.Use(timeout(deps.RequestTimeout))
+
+	// Error fallbacks: emit RFC 9457 problem+json instead of chi's text/plain 404
+	// and empty 405, so every API error response shares Huma's error shape.
+	mux.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		writeProblem(w, http.StatusNotFound, "the requested resource was not found")
+	})
+	mux.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		// chi does not pass the allowed methods to a custom handler, so rebuild
+		// the Allow header (required on a 405 by RFC 9110) by probing the routes.
+		if allow := allowedMethods(mux, r.URL.Path); allow != "" {
+			w.Header().Set("Allow", allow)
+		}
+		writeProblem(w, http.StatusMethodNotAllowed, "the method is not allowed for this resource")
+	})
 
 	// Resource operations are mounted by their adapter packages via the Registrar.
 	api := NewAPI(mux, deps.Version)
@@ -57,4 +73,22 @@ func mountInfra(mux chi.Router, metrics *observability.Metrics, readiness []Read
 	mux.Get("/healthz", handleHealthz)
 	mux.Get("/readyz", handleReadyz(readiness))
 	mux.Handle("/metrics", metrics.Handler())
+}
+
+// allowedMethods returns a comma-separated Allow header value for path by probing
+// which standard methods the router has registered for it.
+func allowedMethods(routes chi.Routes, path string) string {
+	probe := []string{
+		http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodOptions,
+	}
+
+	allowed := make([]string, 0, len(probe))
+	for _, method := range probe {
+		if routes.Match(chi.NewRouteContext(), method, path) {
+			allowed = append(allowed, method)
+		}
+	}
+
+	return strings.Join(allowed, ", ")
 }

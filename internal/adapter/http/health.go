@@ -6,6 +6,12 @@ import (
 	"net/http"
 )
 
+// The infrastructure endpoints (/healthz, /readyz, /metrics) are intentionally
+// excluded from the RFC 9457 problem+json error contract that the API routes
+// follow: liveness/readiness return plain application/json status objects and
+// /metrics returns the Prometheus exposition format, since these are consumed by
+// probes and scrapers rather than API clients.
+
 // statusKey is the JSON field name used by the health and readiness responses.
 const statusKey = "status"
 

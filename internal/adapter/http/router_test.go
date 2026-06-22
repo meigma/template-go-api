@@ -90,9 +90,72 @@ func TestReadyzReflectsChecks(t *testing.T) {
 	}
 }
 
+// TestNotFoundReturnsProblemJSON verifies the chi NotFound fallback emits RFC 9457
+// problem+json instead of chi's text/plain default.
+func TestNotFoundReturnsProblemJSON(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:         discard,
+		Metrics:        observability.NewMetrics(),
+		Version:        "test",
+		RequestTimeout: testRequestTimeout,
+		Readiness:      nil,
+		Register:       nil,
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	resp := get(t, srv, "/does-not-exist")
+	assert.Equal(t, http.StatusNotFound, resp.status)
+	assert.Equal(t, problemContentType, resp.contentType)
+	assert.Contains(t, resp.body, `"status":404`)
+}
+
+// TestRecovererReturnsProblemJSON verifies a panic becomes an RFC 9457 500.
+func TestRecovererReturnsProblemJSON(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	inner := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	})
+	handler := Recoverer(discard)(inner)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
+	assert.Contains(t, rec.Body.String(), `"status":500`)
+}
+
+// TestTimeoutReturnsProblemJSON verifies an elapsed request deadline becomes an
+// RFC 9457 504 when the handler returns without writing.
+func TestTimeoutReturnsProblemJSON(t *testing.T) {
+	t.Parallel()
+
+	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
+	handler := timeout(time.Millisecond)(inner)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusGatewayTimeout, rec.Code)
+	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
+	assert.Contains(t, rec.Body.String(), `"status":504`)
+}
+
 type testResponse struct {
-	status int
-	body   string
+	status      int
+	body        string
+	contentType string
 }
 
 func get(t *testing.T, srv *httptest.Server, path string) testResponse {
@@ -108,5 +171,9 @@ func get(t *testing.T, srv *httptest.Server, path string) testResponse {
 	data, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 
-	return testResponse{status: resp.StatusCode, body: string(data)}
+	return testResponse{
+		status:      resp.StatusCode,
+		body:        string(data),
+		contentType: resp.Header.Get("Content-Type"),
+	}
 }
