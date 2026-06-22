@@ -95,3 +95,43 @@ Open follow-on decisions for the design doc (step-by-step):
 - Cross-cutting: config (existing Viper), logging (slog), observability, middleware
   set (request id, recovery, CORS), graceful shutdown.
 - Reference endpoint scope (healthz + one example resource vs minimal).
+
+## 2026-06-22 12:05 — Decisions: OpenAPI strategy, docs integration, layering
+Goal 2 steps 2–3 settled (verified Huma via context7 + web).
+
+**OpenAPI strategy: Huma (code-first), scoped to the transport layer only.**
+- Take: humachi adapter, typed `huma.Register` operations, input/output structs
+  with tags, schema validation, RFC 9457 errors, OpenAPI 3.1 generation.
+- Leave: humacli (keep existing Cobra/Viper for binary + config), and other
+  out-of-scope extras.
+- Middleware stays at the chi level (`func(http.Handler) http.Handler`); only
+  register at Huma level when it must appear in the spec (e.g. security schemes).
+- Spec-completeness convention: API endpoints go through Huma (in the spec);
+  only infra routes (`/healthz`, `/metrics`) may be raw chi.
+- Tagged structs are transport DTOs in the HTTP adapter, mapped to/from domain
+  types; tags do structural validation, business rules stay in the service.
+- Accepted risk: Huma bus factor (~1 maintainer, ~4.2k★), contained to the
+  transport adapter; migration = rewrite handlers to plain chi, domain untouched.
+
+**Docs integration (Huma ↔ MkDocs):** spec is a build artifact.
+- Server-less export: small Go generator (own command or `go run ./tools/...`,
+  NOT humacli) builds the api and writes `docs/docs/openapi.yaml` via
+  `api.OpenAPI().DowngradeYAML()` (3.0.3 for the renderer; `.YAML()` = 3.1).
+- New Moon `docs:openapi` (Go) task feeds the existing `docs:build`
+  (`mkdocs build --strict`) → spec can't drift from code.
+- Render with **neoteroi OAD** (static, themed, searchable; needs 3.0.3).
+  Alt was mkdocs-swagger-ui-tag (interactive, 3.1). Huma's runtime /docs
+  (Stoplight Elements) is a separate free surface. Optional drift-guard CI check.
+
+**Hexagonal layering: pragmatic ports & adapters.**
+- `internal/<domain>/` owns entities + service (use-case logic) + the outbound
+  port interfaces it consumes (`ports.go`, e.g. Repository) — consumer-defined,
+  inward dependency arrows.
+- `internal/adapter/http/` inbound Huma handlers + DTOs + mapping;
+  `internal/adapter/<store>/` outbound, implements the domain's port.
+- `internal/config/` (existing Viper); `internal/app/` composition root wires +
+  injects deps; `cmd/template-go-api` main parses flags → app.Run().
+- Interface only where substitution is genuinely needed; no separate port pkg.
+
+Next: cross-cutting concerns (config, slog logging, observability depth,
+middleware set, graceful shutdown), then reference-endpoint scope.
