@@ -1,8 +1,4 @@
-// Package http is the inbound HTTP transport adapter. It exposes the todo
-// service over a chi router using Huma for typed operations, request validation,
-// and OpenAPI generation. Tagged structs here are transport DTOs, mapped to and
-// from domain types; only the routes registered through Huma appear in the spec.
-package http
+package todoapi
 
 import "time"
 

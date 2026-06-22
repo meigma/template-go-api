@@ -9,13 +9,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/meigma/template-go-api/internal/observability"
-	"github.com/meigma/template-go-api/internal/todo"
 )
 
 // RouterDeps carries the dependencies needed to assemble the HTTP handler.
 type RouterDeps struct {
-	// Service is the todo use-case service the handlers call.
-	Service *todo.Service
 	// Logger is the base logger for the recover and access-log middleware.
 	Logger *slog.Logger
 	// Metrics provides the metrics middleware and the /metrics handler.
@@ -26,11 +23,13 @@ type RouterDeps struct {
 	RequestTimeout time.Duration
 	// Readiness lists checks evaluated by /readyz; empty means always ready.
 	Readiness []func() error
+	// Register mounts resource operations onto the Huma API.
+	Register Registrar
 }
 
-// NewRouter assembles the chi router: the core middleware stack, the Huma-
-// registered todo operations (which appear in the OpenAPI spec), and the raw
-// infrastructure routes (/healthz, /readyz, /metrics) that bypass the spec.
+// NewRouter assembles the chi router: the core middleware stack, the Huma API
+// with its registered resource operations (which appear in the OpenAPI spec),
+// and the raw infrastructure routes (/healthz, /readyz, /metrics) that bypass it.
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := chi.NewMux()
 
@@ -42,8 +41,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux.Use(deps.Metrics.Middleware())
 	mux.Use(middleware.Timeout(deps.RequestTimeout))
 
-	// API routes go through Huma so they are validated and appear in the spec.
-	NewAPI(mux, deps.Service, deps.Version)
+	// Resource operations are mounted by their adapter packages via the Registrar.
+	api := NewAPI(mux, deps.Version)
+	if deps.Register != nil {
+		deps.Register(api)
+	}
 
 	// Infrastructure routes stay raw chi and are excluded from the spec.
 	mountInfra(mux, deps.Metrics, deps.Readiness)

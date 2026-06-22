@@ -1,4 +1,8 @@
-package http
+// Package todoapi is the HTTP transport adapter for the todo resource: its
+// request/response DTOs, domain<->DTO mapping, error translation, and the Huma
+// operation registrations. It depends inward on the todo domain and plugs into
+// the generic transport (internal/adapter/http) through its Registrar seam.
+package todoapi
 
 import (
 	"context"
@@ -12,14 +16,16 @@ import (
 // tagTodos groups the todo operations in the OpenAPI document.
 const tagTodos = "Todos"
 
-// todoHandlers adapts the todo service to Huma operation handlers.
-type todoHandlers struct {
+// handlers adapts the todo service to Huma operation handlers.
+type handlers struct {
 	service *todo.Service
 }
 
-// register wires the todo operations onto api. API routes go through Huma, so
-// they are validated and appear in the OpenAPI specification.
-func (h *todoHandlers) register(api huma.API) {
+// Register mounts the todo operations on api, backed by service. API routes go
+// through Huma, so they are validated and appear in the OpenAPI specification.
+func Register(api huma.API, service *todo.Service) {
+	h := &handlers{service: service}
+
 	huma.Register(api, huma.Operation{
 		OperationID:   "create-todo",
 		Method:        http.MethodPost,
@@ -56,7 +62,7 @@ func (h *todoHandlers) register(api huma.API) {
 	}, h.complete)
 }
 
-func (h *todoHandlers) create(ctx context.Context, input *CreateTodoInput) (*TodoOutput, error) {
+func (h *handlers) create(ctx context.Context, input *CreateTodoInput) (*TodoOutput, error) {
 	created, err := h.service.Create(ctx, input.Body.Title)
 	if err != nil {
 		return nil, toHumaError(err)
@@ -65,7 +71,7 @@ func (h *todoHandlers) create(ctx context.Context, input *CreateTodoInput) (*Tod
 	return &TodoOutput{Body: toTodoDTO(created)}, nil
 }
 
-func (h *todoHandlers) get(ctx context.Context, input *GetTodoInput) (*TodoOutput, error) {
+func (h *handlers) get(ctx context.Context, input *GetTodoInput) (*TodoOutput, error) {
 	found, err := h.service.Get(ctx, input.ID)
 	if err != nil {
 		return nil, toHumaError(err)
@@ -74,7 +80,7 @@ func (h *todoHandlers) get(ctx context.Context, input *GetTodoInput) (*TodoOutpu
 	return &TodoOutput{Body: toTodoDTO(found)}, nil
 }
 
-func (h *todoHandlers) list(ctx context.Context, _ *struct{}) (*ListTodosOutput, error) {
+func (h *handlers) list(ctx context.Context, _ *struct{}) (*ListTodosOutput, error) {
 	todos, err := h.service.List(ctx)
 	if err != nil {
 		return nil, toHumaError(err)
@@ -86,7 +92,7 @@ func (h *todoHandlers) list(ctx context.Context, _ *struct{}) (*ListTodosOutput,
 	return out, nil
 }
 
-func (h *todoHandlers) complete(ctx context.Context, input *CompleteTodoInput) (*TodoOutput, error) {
+func (h *handlers) complete(ctx context.Context, input *CompleteTodoInput) (*TodoOutput, error) {
 	completed, err := h.service.Complete(ctx, input.ID)
 	if err != nil {
 		return nil, toHumaError(err)

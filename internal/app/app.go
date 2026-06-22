@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
+	"github.com/meigma/template-go-api/internal/adapter/http/todoapi"
 	"github.com/meigma/template-go-api/internal/adapter/memory"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
@@ -28,12 +31,12 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 	service := todo.NewService(memory.NewTodoRepository(), logger)
 	metrics := observability.NewMetrics()
 	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
-		Service:        service,
 		Logger:         logger,
 		Metrics:        metrics,
 		Version:        version,
 		RequestTimeout: cfg.RequestTimeout,
 		Readiness:      nil,
+		Register:       registerResources(service),
 	})
 
 	server := &http.Server{
@@ -62,10 +65,19 @@ func (a *App) Handler() http.Handler {
 func OpenAPIYAML(version string) ([]byte, error) {
 	service := todo.NewService(memory.NewTodoRepository(), nil)
 
-	spec, err := adapterhttp.SpecYAML(service, version)
+	spec, err := adapterhttp.SpecYAML(version, registerResources(service))
 	if err != nil {
 		return nil, fmt.Errorf("build openapi spec: %w", err)
 	}
 
 	return spec, nil
+}
+
+// registerResources composes the per-resource HTTP adapters mounted on the API.
+// Add a new resource by constructing its service above and adding one Register
+// call here.
+func registerResources(todoService *todo.Service) adapterhttp.Registrar {
+	return func(api huma.API) {
+		todoapi.Register(api, todoService)
+	}
 }
