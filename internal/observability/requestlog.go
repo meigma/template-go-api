@@ -34,6 +34,7 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 			logger.LogAttrs(ctx, slog.LevelInfo, "http request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
+				slog.String("client_ip", middleware.GetClientIP(r.Context())),
 				slog.Int("status", wrapped.Status()),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Duration("duration", time.Since(start)),

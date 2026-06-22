@@ -22,6 +22,11 @@ type RouterDeps struct {
 	Version string
 	// RequestTimeout bounds per-request processing in the timeout middleware.
 	RequestTimeout time.Duration
+	// CORSAllowedOrigins lists origins for the CORS middleware; empty disables it.
+	CORSAllowedOrigins []string
+	// TrustedProxyHeader names the proxy header to read the client IP from; empty
+	// trusts only the direct TCP peer.
+	TrustedProxyHeader string
 	// Readiness lists checks evaluated by /readyz; empty means always ready.
 	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
@@ -36,10 +41,18 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux := chi.NewMux()
 
 	// Core middleware, outermost first. Deferred seams (insert here in later
-	// slices): authn/authz, CORS, client-IP (RealIP), and rate limiting.
+	// slices): authn/authz and rate limiting.
+	//
+	// Client-IP runs first so the request id, access log, and metrics all see
+	// the resolved IP. CORS sits after the access log (so preflight responses are
+	// logged and metered) and is installed only when origins are configured.
+	mux.Use(clientIPMiddleware(deps.TrustedProxyHeader))
 	mux.Use(middleware.RequestID)
 	mux.Use(Recoverer(deps.Logger))
 	mux.Use(observability.RequestLogger(deps.Logger))
+	if len(deps.CORSAllowedOrigins) > 0 {
+		mux.Use(corsMiddleware(deps.CORSAllowedOrigins))
+	}
 	mux.Use(deps.Metrics.Middleware())
 	mux.Use(timeout(deps.RequestTimeout))
 

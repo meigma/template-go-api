@@ -31,12 +31,14 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 	service := todo.NewService(memory.NewTodoRepository(), logger)
 	metrics := observability.NewMetrics()
 	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
-		Logger:         logger,
-		Metrics:        metrics,
-		Version:        version,
-		RequestTimeout: cfg.RequestTimeout,
-		Readiness:      nil,
-		Register:       registerResources(service),
+		Logger:             logger,
+		Metrics:            metrics,
+		Version:            version,
+		RequestTimeout:     cfg.RequestTimeout,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
+		TrustedProxyHeader: cfg.TrustedProxyHeader,
+		Readiness:          nil,
+		Register:           registerResources(service),
 	})
 
 	server := &http.Server{
