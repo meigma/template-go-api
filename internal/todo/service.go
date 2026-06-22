@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/meigma/template-go-api/internal/logctx"
 )
 
 // Service implements the todo use-cases on top of a Repository.
@@ -53,6 +55,17 @@ func NewService(repo Repository, logger *slog.Logger, opts ...Option) *Service {
 	return s
 }
 
+// loggerFor returns the request-scoped logger carried on ctx when present,
+// otherwise the logger injected at construction. This lets service logs inherit
+// the request_id without coupling the domain to the transport layer.
+func (s *Service) loggerFor(ctx context.Context) *slog.Logger {
+	if logger, ok := logctx.From(ctx); ok {
+		return logger
+	}
+
+	return s.logger
+}
+
 // Create validates and stores a new open todo.
 func (s *Service) Create(ctx context.Context, title string) (Todo, error) {
 	created, err := NewTodo(s.newID(), title, s.now())
@@ -63,7 +76,7 @@ func (s *Service) Create(ctx context.Context, title string) (Todo, error) {
 		return Todo{}, fmt.Errorf("save todo: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "todo created", slog.String("todo_id", created.ID))
+	s.loggerFor(ctx).InfoContext(ctx, "todo created", slog.String("todo_id", created.ID))
 
 	return created, nil
 }
@@ -101,7 +114,7 @@ func (s *Service) Complete(ctx context.Context, id string) (Todo, error) {
 		return Todo{}, fmt.Errorf("save todo: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "todo completed", slog.String("todo_id", completed.ID))
+	s.loggerFor(ctx).InfoContext(ctx, "todo completed", slog.String("todo_id", completed.ID))
 
 	return completed, nil
 }

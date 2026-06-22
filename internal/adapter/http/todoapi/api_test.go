@@ -1,6 +1,7 @@
 package todoapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -129,4 +130,57 @@ func TestTodoAPIFunctional(t *testing.T) {
 	resp = doRequest(t, srv, http.MethodDelete, "/todos", "")
 	require.Equal(t, http.StatusMethodNotAllowed, resp.status)
 	assert.Contains(t, resp.contentType, "application/problem+json")
+}
+
+// TestServiceLogCarriesRequestID proves the request-scoped logger reaches the
+// domain: the service's "todo created" line must carry the same request_id as
+// the access-log line. The handler is driven synchronously (no live server) so
+// the shared buffer is written and read on one goroutine, avoiding a data race.
+func TestServiceLogCarriesRequestID(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := observability.NewLogger(&buf, slog.LevelInfo, "json")
+	service := todo.NewService(memory.NewTodoRepository(), logger)
+	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
+		Logger:         logger,
+		Metrics:        observability.NewMetrics(),
+		Version:        "test",
+		RequestTimeout: testRequestTimeout,
+		Readiness:      nil,
+		Register:       func(api huma.API) { todoapi.Register(api, service) },
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/todos", strings.NewReader(`{"title":"buy milk"}`))
+	req.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	created := findLogEntry(t, buf.String(), "todo created")
+	access := findLogEntry(t, buf.String(), "http request")
+	require.NotEmpty(t, created["request_id"])
+	assert.Equal(t, access["request_id"], created["request_id"])
+}
+
+// findLogEntry returns the first JSON log line in logs whose msg equals want.
+func findLogEntry(t *testing.T, logs, want string) map[string]any {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
+		if line == "" {
+			continue
+		}
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["msg"] == want {
+			return entry
+		}
+	}
+
+	t.Fatalf("no log entry with msg %q in:\n%s", want, logs)
+
+	return nil
 }
