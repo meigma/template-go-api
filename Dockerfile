@@ -39,20 +39,20 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -trimpath \
       -buildvcs=false \
       -ldflags="-s -w -buildid= -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-      -o /out/template-go \
-      ./cmd/template-go
+      -o /out/template-go-api \
+      ./cmd/template-go-api
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639 AS runtime
 ARG VERSION=dev
 ARG COMMIT=none
-ARG SOURCE=https://github.com/meigma/template-go
+ARG SOURCE=https://github.com/meigma/template-go-api
 
-LABEL org.opencontainers.image.title="template-go" \
-      org.opencontainers.image.description="Meigma Go repository template application" \
+LABEL org.opencontainers.image.title="template-go-api" \
+      org.opencontainers.image.description="Meigma Go web API server template" \
       org.opencontainers.image.source="${SOURCE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"
 
 USER 65532:65532
-COPY --from=build /out/template-go /usr/local/bin/template-go
-ENTRYPOINT ["/usr/local/bin/template-go"]
+COPY --from=build /out/template-go-api /usr/local/bin/template-go-api
+ENTRYPOINT ["/usr/local/bin/template-go-api"]

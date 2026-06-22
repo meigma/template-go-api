@@ -1,7 +1,7 @@
-# template-go
+# template-go-api
 
-`template-go` is the reusable Go repository starter for Meigma projects.
-It includes a small Go CLI skeleton, Moon tasks, pinned CI, Dependabot, baseline repository security settings, and an enabled Release Please plus GoReleaser release layer.
+`template-go-api` is the Meigma starter for building Go web (HTTP) API services.
+It ships the shared Meigma repository baseline — Moon tasks, pinned CI, Dependabot, baseline repository security settings, and an enabled Release Please plus GoReleaser release layer — around a small Go entrypoint scaffold that the API server grows from.
 
 ## Local Bootstrap
 
@@ -15,10 +15,10 @@ After creating a new repository from this template, replace the placeholder name
 
 ```sh
 go mod edit -module github.com/meigma/YOUR_REPO
-mv cmd/template-go cmd/YOUR_BINARY
+mv cmd/template-go-api cmd/YOUR_BINARY
 ```
 
-Then update `template-go` references in the Moon tasks, GoReleaser config, `ghd.toml`, README, and package docs.
+Then update `template-go-api` references in the Moon tasks, GoReleaser config, `ghd.toml`, README, and package docs.
 
 ## Common Tasks
 
@@ -41,12 +41,12 @@ moon ci --summary minimal
 The starter CLI is intentionally small:
 
 ```sh
-go run ./cmd/template-go --version
-go run ./cmd/template-go --message "hello from cobra"
+go run ./cmd/template-go-api --version
+go run ./cmd/template-go-api --message "hello from cobra"
 go test ./...
 ```
 
-The CLI entrypoint uses Cobra and Viper in the same shape as other Meigma CLIs: `cmd/template-go` stays thin, `internal/cli` owns command construction, and Viper-backed flags can also be supplied through `TEMPLATE_GO_*` environment variables.
+The CLI entrypoint uses Cobra and Viper in the same shape as other Meigma CLIs: `cmd/template-go-api` stays thin, `internal/cli` owns command construction, and Viper-backed flags can also be supplied through `TEMPLATE_GO_API_*` environment variables.
 
 ## Container Image
 
@@ -54,8 +54,8 @@ The included Dockerfile builds a static Linux binary and copies it into a non-ro
 
 ```sh
 docker build --target test .
-docker build -t template-go:dev .
-docker run --rm template-go:dev --version
+docker build -t template-go-api:dev .
+docker run --rm template-go-api:dev --version
 ```
 
 The Dockerfile pins the builder and runtime images by digest and verifies that the selected Go builder image matches `.go-version`. When bumping Go, update `.go-version` and the builder `FROM` tag/digest together.
@@ -67,7 +67,7 @@ docker build \
   --build-arg VERSION="$(git describe --tags --always --dirty)" \
   --build-arg COMMIT="$(git rev-parse HEAD)" \
   --build-arg DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -t template-go:dev .
+  -t template-go-api:dev .
 ```
 
 ## CI and Security
@@ -93,7 +93,7 @@ The release path is:
 - Release Dry Run rehearses the GoReleaser binary path and native-runner Docker container build path on pull requests.
 - GoReleaser builds binaries, checksums, and SBOMs without publishing directly.
 - The release workflow uploads assets to the draft release and creates a GitHub-hosted attestation for `checksums.txt`.
-- The release workflow builds amd64 and arm64 container images on native GitHub-hosted runners, publishes `ghcr.io/meigma/template-go:vX.Y.Z` as a multi-platform manifest, attaches BuildKit provenance and SBOM metadata, and creates a GitHub-native attestation for the manifest digest.
+- The release workflow builds amd64 and arm64 container images on native GitHub-hosted runners, publishes `ghcr.io/meigma/template-go-api:vX.Y.Z` as a multi-platform manifest, attaches BuildKit provenance and SBOM metadata, and creates a GitHub-native attestation for the manifest digest.
 - A human inspects the draft release before publication.
 
 The root `ghd.toml` matches the default GoReleaser output so generated projects can be installed with `ghd` once the release workflow runs.

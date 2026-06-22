@@ -1,15 +1,15 @@
-# Welcome to the Meigma Go Template
+# Welcome to the Meigma Go API Template
 
-This repository was generated from `template-go`, the standard starter for Meigma Go projects.
-It is meant to give new repositories a working baseline on day one: a small Go CLI by default, Moon task orchestration, pinned CI, dependency automation, repository security defaults, and an enabled release pipeline that has already been exercised by the template application.
+This repository was generated from `template-go-api`, the standard starter for Meigma Go web API services.
+It is meant to give new repositories a working baseline on day one: a small Go entrypoint scaffold by default, Moon task orchestration, pinned CI, dependency automation, repository security defaults, and an enabled release pipeline that has already been exercised by the template application.
 
 Delete this file after you finish the first-repository setup checklist below.
 It is only here to orient the initial project owner.
 
 ## What This Template Provides
 
-- A minimal Go module at `github.com/meigma/template-go`.
-- A Cobra/Viper CLI skeleton under `cmd/template-go` and `internal/cli`.
+- A minimal Go module at `github.com/meigma/template-go-api`.
+- A Cobra/Viper CLI skeleton under `cmd/template-go-api` and `internal/cli`.
 - Moon tasks for `format`, `lint`, `build`, `test`, and `check`.
 - `golangci-lint` wired through Proto and Moon.
 - CI that delegates to `moon ci --summary minimal` with pinned actions, dependency caches, and minimal token permissions.
@@ -62,15 +62,15 @@ The nominal generated-project path is a CLI or service with both downloadable bi
 3. For a binary-producing project, rename the binary directory:
 
    ```sh
-   mv cmd/template-go cmd/YOUR_BINARY
+   mv cmd/template-go-api cmd/YOUR_BINARY
    ```
 
-   For a library-only project, delete `cmd/template-go`, remove or rewrite `internal/cli`, and remove Cobra/Viper dependencies that are no longer used.
+   For a library-only project, delete `cmd/template-go-api`, remove or rewrite `internal/cli`, and remove Cobra/Viper dependencies that are no longer used.
 
 4. Replace template placeholders:
 
    ```sh
-   rg "template-go|TEMPLATE_GO|github.com/meigma/template-go"
+   rg "template-go-api|TEMPLATE_GO_API|github.com/meigma/template-go-api"
    ```
 
    Update Go imports, Moon metadata, README text, docs text, and CLI environment variable prefixes. For release-bearing projects, also update `.goreleaser.yaml`, `release-please-config.json`, `ghd.toml`, `Dockerfile`, and `.github/workflows/release*.yml` as applicable.
