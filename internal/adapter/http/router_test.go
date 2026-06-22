@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -49,23 +50,40 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 	assert.Contains(t, metrics.body, "go_goroutines")
 }
 
-// TestReadyzReflectsChecks verifies the ReadinessCheck seam: a failing check
-// yields 503, and a passing check yields 200.
+// TestReadyzReflectsChecks verifies the named readiness seam: every check runs
+// (no short-circuit) and each result is reported by name, with the overall
+// status reflecting whether any check failed.
 func TestReadyzReflectsChecks(t *testing.T) {
 	t.Parallel()
 
 	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
 
+	ok := func(context.Context) error { return nil }
+	down := func(context.Context) error { return errors.New("down") }
+
 	tests := []struct {
-		name  string
-		check ReadinessCheck
-		want  int
+		name       string
+		checks     []ReadinessCheck
+		wantStatus int
+		wantBody   map[string]string
 	}{
-		{name: "ready", check: func(context.Context) error { return nil }, want: http.StatusOK},
 		{
-			name:  "unavailable",
-			check: func(context.Context) error { return errors.New("down") },
-			want:  http.StatusServiceUnavailable,
+			name:       "no checks is ready",
+			checks:     nil,
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]string{},
+		},
+		{
+			name:       "all pass",
+			checks:     []ReadinessCheck{{Name: "store", Check: ok}},
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]string{"store": "ok"},
+		},
+		{
+			name:       "any failure is unavailable",
+			checks:     []ReadinessCheck{{Name: "store", Check: ok}, {Name: "cache", Check: down}},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   map[string]string{"store": "ok", "cache": "unavailable"},
 		},
 	}
 
@@ -78,14 +96,19 @@ func TestReadyzReflectsChecks(t *testing.T) {
 				Metrics:        observability.NewMetrics(),
 				Version:        "test",
 				RequestTimeout: testRequestTimeout,
-				Readiness:      []ReadinessCheck{tt.check},
+				Readiness:      tt.checks,
 				Register:       nil,
 			})
 
 			srv := httptest.NewServer(handler)
 			t.Cleanup(srv.Close)
 
-			assert.Equal(t, tt.want, get(t, srv, "/readyz").status)
+			resp := get(t, srv, "/readyz")
+			assert.Equal(t, tt.wantStatus, resp.status)
+
+			var body readyzResponse
+			require.NoError(t, json.Unmarshal([]byte(resp.body), &body))
+			assert.Equal(t, tt.wantBody, body.Checks)
 		})
 	}
 }

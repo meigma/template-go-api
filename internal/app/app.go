@@ -37,8 +37,11 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 		RequestTimeout:     cfg.RequestTimeout,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		TrustedProxyHeader: cfg.TrustedProxyHeader,
-		Readiness:          nil,
-		Register:           registerResources(service),
+		// The in-memory store has nothing to probe, so /readyz is always ready.
+		// Wire real checks here when adding a backing datastore, for example:
+		//   Readiness: []adapterhttp.ReadinessCheck{{Name: "store", Check: repo.Ping}},
+		Readiness: nil,
+		Register:  registerResources(service),
 	})
 
 	server := &http.Server{
