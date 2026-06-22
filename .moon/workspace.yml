@@ -1,4 +1,4 @@
-# Shared Moon workspace configuration for the repository template.
+# Shared Moon workspace configuration for the Go web API server template.
 # Keep the current projects explicit, then uncomment the discovery patterns
 # below as the template grows into apps, packages, services, or tools.
 

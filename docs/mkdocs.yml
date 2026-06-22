@@ -1,8 +1,8 @@
-site_name: template-go
-site_description: Meigma Go repository template
-site_url: https://meigma.github.io/template-go/
-repo_name: meigma/template-go
-repo_url: https://github.com/meigma/template-go
+site_name: template-go-api
+site_description: Meigma Go web API server template
+site_url: https://meigma.github.io/template-go-api/
+repo_name: meigma/template-go-api
+repo_url: https://github.com/meigma/template-go-api
 edit_uri: edit/master/docs/docs/
 docs_dir: docs
 site_dir: build

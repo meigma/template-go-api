@@ -1,12 +1,12 @@
 ---
-title: template-go Docs
+title: template-go-api Docs
 slug: /
-description: Starting point for Meigma Go projects.
+description: Starting point for Meigma Go web API services.
 ---
 
-# template-go Docs
+# template-go-api Docs
 
-This repository is the starting point for Meigma Go projects.
+This repository is the starting point for Meigma Go web API services.
 
 Generated projects should replace this page with project-specific documentation after bootstrapping:
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/meigma/template-go/internal/templateinfo"
+	"github.com/meigma/template-go-api/internal/templateinfo"
 )
 
 // Config contains runtime settings used by the starter CLI.
