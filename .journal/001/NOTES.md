@@ -157,3 +157,16 @@ Wrote **`.journal/TARGET_SHAPE.md`** (v1, journal-only per user — no PR, produ
 repo untouched) capturing all of goal 2's decisions + proposed package layout,
 request flow, OpenAPI/docs pipeline, deps to add, and out-of-scope seams. Added a
 discovery pointer in TECH_NOTES.md. Awaiting user review of the v1 doc.
+
+## 2026-06-22 13:19 — Close
+User approved ("LGTM") and closed the session. Both goals met.
+
+Hand-off state:
+- Goal 1: PR #3 squash-merged to `master` (commit `3d1edae`); rename worktree
+  removed; local `master` fast-forwarded and clean.
+- Goal 2: `.journal/TARGET_SHAPE.md` v1 written (journal-only) and approved;
+  TECH_NOTES.md points to it.
+- No open implementation branches; no journal contamination on `master`.
+
+Next session: implement the API-server template per TARGET_SHAPE.md (see
+SUMMARY.md → Open Threads). PR #3: https://github.com/meigma/template-go-api/pull/3
