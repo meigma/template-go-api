@@ -71,3 +71,27 @@ PR #3 squash-merged into `master` (merge commit `3d1edae`). Goal 1 (referencing
 pass) is fully landed. Local `master` fast-forwarded and now tracks
 `origin/master`; implementation worktree removed; local + remote
 `chore/rename-template-go-api` branches deleted. Proceeding to goal 2 next.
+
+## 2026-06-22 10:08 — Framework decision: chi on net/http
+Goal 2 step 1 (HTTP framework). Ran a research workflow (6 framework profilers +
+synthesis, live 2026 data) over net/http, chi, gin, echo, fiber, gorilla/mux
+across maturity, ecosystem, ease of use, DX, performance, net/http compat.
+
+Decision (user): **chi v5 on net/http**, with plain stdlib ServeMux as the
+zero-dependency fallback. Rationale: for a hexagonal, thin-adapter template the
+dominant axis is net/http compatibility — chi keeps plain `http.Handler` /
+`func(http.Handler) http.Handler` so the framework never leaks into core ports
+and migration to/from raw ServeMux is near-zero churn; tiny stable core (since
+2016) = low inheritance risk. Evidence pointed away from the user's initial Gin
+lean (gin.Context couples every handler/middleware to the framework; slow/uneven
+cadence + maintainer-bandwidth backlog). Performance is a non-factor (all radix
+routers + 1.22 mux are one tier; Fiber's fasthttp edge vanishes behind a DB and
+forfeits the net/http ecosystem + HTTP/2). gorilla/mux excluded (dormant).
+
+Open follow-on decisions for the design doc (step-by-step):
+- OpenAPI strategy: code-first (Huma, runs on chi/stdlib) vs spec-first
+  (oapi-codegen chi target) vs defer. Keep router & OpenAPI as separate decisions.
+- Hexagonal layering depth (explicit ports/adapters vs lighter handler→service→store).
+- Cross-cutting: config (existing Viper), logging (slog), observability, middleware
+  set (request id, recovery, CORS), graceful shutdown.
+- Reference endpoint scope (healthz + one example resource vs minimal).
