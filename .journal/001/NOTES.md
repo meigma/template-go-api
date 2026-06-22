@@ -135,3 +135,25 @@ Goal 2 steps 2–3 settled (verified Huma via context7 + web).
 
 Next: cross-cutting concerns (config, slog logging, observability depth,
 middleware set, graceful shutdown), then reference-endpoint scope.
+
+## 2026-06-22 12:51 — Cross-cutting + reference slice decided; TARGET_SHAPE.md v1 written
+Goal 2 steps 4–5 settled, completing the decision pass.
+
+- **Cross-cutting (#4):** slog structured logging (injected, JSON, request-scoped
+  child w/ request id) + **OpenMetrics `/metrics`** (Prometheus client: HTTP +
+  Go runtime metrics). Tracing = opt-in OTel seam only. Viper config (server
+  addr, timeouts, shutdown grace, log level/format, CORS). Middleware order:
+  request id → recovery → access log → timeout → ClientIP → CORS. Graceful
+  shutdown via signal.NotifyContext + server.Shutdown.
+- **Reference slice (#5):** full vertical slice with an **in-memory** store
+  (Huma op → service → consumer-defined Repository port → in-memory adapter),
+  plus `/healthz` + `/readyz`. Zero infra; functional-testable out of the box.
+- **Entrypoint:** Cobra root → `serve` (default) / `version` / `openapi`
+  (server-less spec dump). Keeps Cobra/Viper.
+- **Testing:** functional-first via httptest through the in-memory adapter;
+  testcontainers-go reserved for a future real-DB adapter.
+
+Wrote **`.journal/TARGET_SHAPE.md`** (v1, journal-only per user — no PR, product
+repo untouched) capturing all of goal 2's decisions + proposed package layout,
+request flow, OpenAPI/docs pipeline, deps to add, and out-of-scope seams. Added a
+discovery pointer in TECH_NOTES.md. Awaiting user review of the v1 doc.
