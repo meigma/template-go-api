@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/meigma/template-go-api/internal/config"
-	"github.com/meigma/template-go-api/internal/templateinfo"
 )
 
 // BuildInfo describes linker-injected build metadata printed by --version.
@@ -30,13 +29,15 @@ type Options struct {
 	Out io.Writer
 	// Err receives diagnostics and human-readable status.
 	Err io.Writer
-	// Build controls the root command version output.
+	// Build controls the version output.
 	Build BuildInfo
 	// Viper is the configuration instance used by the command tree.
 	Viper *viper.Viper
 }
 
-// NewRootCommand creates the template-go-api Cobra command tree.
+// NewRootCommand creates the template-go-api Cobra command tree. The root runs
+// the HTTP server (the same as the serve subcommand) when invoked with no
+// subcommand.
 func NewRootCommand(options Options) *cobra.Command {
 	if options.In == nil {
 		options.In = strings.NewReader("")
@@ -55,30 +56,33 @@ func NewRootCommand(options Options) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "template-go-api",
 		Short:         "Meigma Go web API server template",
+		Long:          "template-go-api runs a small HTTP API server built on chi and Huma.",
 		Version:       options.Build.Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return initializeConfig(cmd, options.Viper)
 		},
-		RunE: func(_ *cobra.Command, _ []string) error {
-			cfg := config.Load(options.Viper)
-			return printLine(options.Out, cfg.Message)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runServe(cmd, options)
 		},
 	}
-	root.SetVersionTemplate(
-		fmt.Sprintf(
-			"template-go-api %s (%s) built %s\n",
-			options.Build.Version,
-			options.Build.Commit,
-			options.Build.Date,
-		),
-	)
+	root.SetVersionTemplate(versionLine(options.Build) + "\n")
 	root.SetIn(options.In)
 	root.SetOut(options.Out)
 	root.SetErr(options.Err)
-	root.PersistentFlags().String("message", templateinfo.Summary(), "message to print")
+	config.RegisterFlags(root.PersistentFlags())
+	root.AddCommand(newServeCommand(options))
+	root.AddCommand(newVersionCommand(options))
+	root.AddCommand(newOpenAPICommand(options))
+
 	return root
+}
+
+// versionLine formats the single-line build metadata used by both the
+// --version flag and the version subcommand.
+func versionLine(build BuildInfo) string {
+	return fmt.Sprintf("template-go-api %s (%s) built %s", build.Version, build.Commit, build.Date)
 }
 
 func (b BuildInfo) withDefaults() BuildInfo {
@@ -91,6 +95,7 @@ func (b BuildInfo) withDefaults() BuildInfo {
 	if strings.TrimSpace(b.Date) == "" {
 		b.Date = "unknown"
 	}
+
 	return b
 }
 
@@ -104,14 +109,6 @@ func initializeConfig(cmd *cobra.Command, vp *viper.Viper) error {
 	}
 	if err := vp.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("bind flags: %w", err)
-	}
-
-	return nil
-}
-
-func printLine(w io.Writer, line string) error {
-	if _, err := fmt.Fprintln(w, line); err != nil {
-		return fmt.Errorf("write output: %w", err)
 	}
 
 	return nil
