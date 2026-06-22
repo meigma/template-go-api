@@ -5,67 +5,55 @@ import (
 	"context"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestVersionFlagPrintsBuildMetadata(t *testing.T) {
+const (
+	testVersion = "0.1.0"
+	testCommit  = "abc1234"
+	testDate    = "2026-05-08T10:00:00Z"
+	wantVersion = "template-go-api 0.1.0 (abc1234) built 2026-05-08T10:00:00Z\n"
+)
+
+func testBuild() BuildInfo {
+	return BuildInfo{Version: testVersion, Commit: testCommit, Date: testDate}
+}
+
+func TestVersionFlag(t *testing.T) {
 	t.Parallel()
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	root := NewRootCommand(Options{
-		Out: &stdout,
-		Err: &stderr,
-		Build: BuildInfo{
-			Version: "0.1.0",
-			Commit:  "abc1234",
-			Date:    "2026-05-08T10:00:00Z",
-		},
-	})
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand(Options{Out: &stdout, Err: &stderr, Build: testBuild()})
 	root.SetArgs([]string{"--version"})
 
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("ExecuteContext returned an error: %v", err)
-	}
-	if got, want := stdout.String(), "template-go-api 0.1.0 (abc1234) built 2026-05-08T10:00:00Z\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
-	}
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.Equal(t, wantVersion, stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
-func TestRootCommandPrintsConfiguredMessage(t *testing.T) {
+func TestVersionSubcommand(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	root := NewRootCommand(Options{
-		Out:   &stdout,
-		Viper: viper.New(),
-	})
-	root.SetArgs([]string{"--message", "hello from cobra"})
+	root := NewRootCommand(Options{Out: &stdout, Build: testBuild()})
+	root.SetArgs([]string{"version"})
 
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("ExecuteContext returned an error: %v", err)
-	}
-	if got, want := stdout.String(), "hello from cobra\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.Equal(t, wantVersion, stdout.String())
 }
 
-func TestRootCommandReadsMessageFromEnvironment(t *testing.T) {
-	t.Setenv("TEMPLATE_GO_API_MESSAGE", "hello from viper")
+func TestRootHasSubcommands(t *testing.T) {
+	t.Parallel()
 
-	var stdout bytes.Buffer
-	root := NewRootCommand(Options{
-		Out:   &stdout,
-		Viper: viper.New(),
-	})
+	root := NewRootCommand(Options{Build: testBuild()})
 
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("ExecuteContext returned an error: %v", err)
+	names := make(map[string]bool)
+	for _, cmd := range root.Commands() {
+		names[cmd.Name()] = true
 	}
-	if got, want := stdout.String(), "hello from viper\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
+
+	assert.True(t, names["serve"])
+	assert.True(t, names["version"])
+	assert.True(t, names["openapi"])
 }
