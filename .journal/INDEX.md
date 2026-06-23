@@ -9,4 +9,4 @@
 | 005 | 2026-06-23 | Session 005 | in-progress | Session opened; awaiting the user's request. |
 | 006 | 2026-06-23 | Docker Compose day-one stack (API + PostgreSQL) | complete | Shipped `compose.yaml` (postgres → migrate → seed → api DAG) with a drop-in `hack/sql/` seed hook over an ephemeral Postgres — PR #7 merged (`8b68bd4`). |
 | 007 | 2026-06-23 | Restructure internal/ to couple each domain's code | complete | Moved the todo adapters under `internal/todo/{httpapi,memory,postgres}` (shared transport/DB infra stays under `internal/adapter/`) as a behavior-preserving reorg — PR #8 merged (`1f1e5a7`). |
-| 008 | 2026-06-23 | Remove the memory adapter, ship PostgreSQL-only | in-progress | Session opened; goal is to drop the in-memory tier and `--store` toggle so PostgreSQL is the template's only persistence layer. |
+| 008 | 2026-06-23 | Remove the memory adapter, ship PostgreSQL-only | in-progress | Dropped the in-memory tier and `--store` toggle (PostgreSQL-only) and adopted mockery for repository test doubles — PR #9 open (`16e39e1`), awaiting review/merge. |
