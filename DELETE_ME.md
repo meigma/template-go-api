@@ -8,10 +8,11 @@ It is only here to orient the initial project owner.
 
 ## What This Template Provides
 
-- A runnable hexagonal HTTP API server (chi + Huma) at `github.com/meigma/template-go-api`, with a `todo` example resource backed by an in-memory store, RFC 9457 errors, `/healthz`, `/readyz`, and `/metrics`, runtime API docs at `/docs`, and an `openapi` spec-export command.
-- A Cobra/Viper entrypoint under `cmd/template-go-api` and `internal/cli` exposing `serve` (default), `version`, and `openapi`.
-- Moon tasks for `format`, `lint`, `build`, `test`, and `check`.
-- `golangci-lint` wired through Proto and Moon.
+- A runnable hexagonal HTTP API server (chi + Huma) at `github.com/meigma/template-go-api`, with a `todo` example resource, RFC 9457 errors, `/healthz`, `/readyz`, and `/metrics`, runtime API docs at `/docs`, and an `openapi` spec-export command.
+- Two persistence adapters behind one port: an in-memory store (the zero-infrastructure default) and a PostgreSQL adapter (pgx + sqlc typed queries + goose migrations), selected at runtime with `--store=memory|postgres`. The PostgreSQL path adds a `migrate` subcommand, a committed-and-drift-guarded sqlc layer, a real `/readyz` check, and container-backed integration tests.
+- A Cobra/Viper entrypoint under `cmd/template-go-api` and `internal/cli` exposing `serve` (default), `version`, `openapi`, and `migrate`.
+- Moon tasks for `format`, `lint`, `build`, `test`, and `check`, plus persistence tasks `sqlc` / `sqlc-check` (regenerate and drift-guard the typed query layer), `migrate` (run database migrations), and `test-integration` (container-backed adapter tests).
+- `golangci-lint`, `sqlc`, and `goose` wired through Proto and Moon.
 - CI that delegates to `moon ci --summary minimal` with pinned actions, dependency caches, and minimal token permissions.
 - A scheduled container vulnerability scan that uploads SARIF results to GitHub code scanning.
 - Dependabot coverage for GitHub Actions, Docker base images, Go modules, and the docs uv project.
@@ -82,11 +83,13 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    The `todo` resource is a reference slice that demonstrates the hexagonal seams, not a product feature. To make it your own:
 
    - Add a domain package under `internal/<resource>` (entity, `Repository` port, and `Service`), mirroring `internal/todo`.
-   - Implement the port: start from `internal/adapter/memory`, then swap it for a real datastore when you need persistence.
+   - Implement the port: start from `internal/adapter/memory` for zero-infra, or mirror `internal/adapter/postgres` (pgx + sqlc + goose) when you need persistence. The README's [Persistence](README.md#persistence) section covers the migration and sqlc-regeneration workflow.
    - Add a transport adapter under `internal/adapter/http/<resource>api` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/adapter/http/todoapi`.
    - Add one `Register` call in `registerResources` in `internal/app/app.go`.
-   - When you wire a real datastore, add a readiness check to the `Readiness` slice in `internal/app/app.go` so `/readyz` reflects it.
-   - Run `moon run openapi` to refresh `docs/docs/openapi.yaml` after changing the API; the CI drift-guard fails if it is stale.
+   - When you wire a real datastore, add a readiness check to the `Readiness` slice in `internal/app/app.go` so `/readyz` reflects it (the PostgreSQL adapter shows the pattern with its `Ping` check).
+   - Run `moon run openapi` to refresh `docs/docs/openapi.yaml` after changing the API, and `moon run sqlc` (then commit) after changing PostgreSQL migrations or queries; both CI drift-guards fail if the committed output is stale.
+
+   If your project never needs SQL persistence, you can delete `internal/adapter/postgres`, `sqlc.yaml`, the `sqlc`/`sqlc-check`/`migrate`/`test-integration` Moon tasks, the `migrate` subcommand, the `--store`/`--database-url`/`--db-max-conns` config flags, the `.moon/proto/{sqlc,goose}.toml` plugins and their `.prototools` pins, and the pgx/sqlc/goose/testcontainers Go dependencies, then run `go mod tidy`. If your project never uses the in-memory store, drop `internal/adapter/memory` and default `--store` to `postgres` instead.
 
    Keep the generic transport in `internal/adapter/http` (router, middleware, `/healthz`/`/readyz`/`/metrics`, RFC 9457 fallbacks, the `Registrar` seam), `internal/config`, and `internal/observability` as-is unless you have a reason to change them.
 
