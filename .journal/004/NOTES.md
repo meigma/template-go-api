@@ -250,3 +250,26 @@ comment embeds into the generated doc → querier.go/todos.sql.go updated, else
 sqlc-check would drift). `moon run root:check` green. Pushed to PR #6 (now 9
 commits).
 
+## 2026-06-23 — Integration tests moved to internal/integration (commit 8fe240f)
+User set a convention: integration tests belong in a dedicated `internal/integration`
+package, separate from unit tests (discoverability) and forced through package
+boundaries / public APIs rather than sitting next to consumed code. The Phase C
+tests were already `package postgres_test` (black-box, public-API only), so the
+move was clean: relocated `helper_test.go`→`postgres_fixture_test.go` and
+`repository_test.go`→`postgres_test.go` under `internal/integration/`, renamed
+package `postgres_test`→`integration`, no other code changes (they already used
+`postgres.Migrate/Connect/Config/NewTodoRepository` + `todo.*`). Added
+`internal/integration/doc.go` (no build tag) to anchor the package so the
+default `go test ./...` doesn't error on a tag-only directory. Repointed
+`test-integration` moon task to `./internal/integration/...`. Updated
+README (location convention + path), DELETE_ME (resource-replacement guidance +
+trim-down list now includes `internal/integration`), and the design doc (layout +
+testing section). Validated: default `go test ./...` → `internal/integration [no
+test files]`; `moon run root:check` green (lint covers the moved files via
+`run.build-tags`); fresh `go test -tags integration ./internal/integration/...`
+passes vs a real container (4.9s). PR #6 now 10 commits.
+
+Reusable convention for this template: integration tests → `internal/integration`
+(package `integration`, `//go:build integration`, `doc.go` anchor); unit tests
+stay beside code.
+
