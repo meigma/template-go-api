@@ -72,3 +72,38 @@ Bottom line: feasible, low-risk, almost entirely mechanical (per memory
 `separate-mechanical-from-design-work`, settle the exact target shape first, then
 the move is mechanical). Offered to sketch the concrete target tree or prototype
 the move on a worktree to prove it compiles. Awaiting user direction.
+
+## 2026-06-23 15:55 — Decisions + plan + implementation
+User chose the **flat** model (`internal/todo/{httpapi,memory,postgres}`, no
+`adapters/` layer) and to keep **DB schema/migrations/pool infra shared**.
+Clarified via AskUserQuestion: integration tests **stay** in `internal/integration`.
+Plan written + approved (`~/.claude/plans/concurrent-chasing-wirth.md`).
+
+Key refinement found while reading files: migrations are already a sibling of the
+shared pool/migrate code, so the lowest-churn split is to keep ALL shared infra
+exactly where it is (`internal/adapter/http`, slimmed `internal/adapter/postgres`)
+and move only the todo-specific files out. Symmetric result: `internal/adapter/` =
+shared cross-domain infra; `internal/todo/` = todo's own code.
+
+Implemented on worktree `refactor/domain-coupled-internal` (off master):
+- `git mv` 3 groups → `internal/todo/{httpapi,memory,postgres}` (history preserved).
+  Package `todoapi`→`httpapi`; `memory`/`postgres` names unchanged.
+- `internal/adapter/postgres` keeps `postgres.go`/`migrate.go`/`migrations.go`/
+  `migrations/`; todo repo+mapping+queries+sqlc moved out.
+- `app.go` + integration fixture alias the per-domain postgres import as
+  `todopostgres` (clash with shared `internal/adapter/postgres`, both pkg `postgres`).
+- `sqlc.yaml`/`moon.yml`: queries+out → `internal/todo/postgres/{queries,sqlc}`;
+  schema/migrations paths unchanged. Regenerated sqlc → byte-identical (drift clean).
+- Updated `api.go` doc comment, README (layout + persistence + add-a-resource),
+  DELETE_ME (add-a-resource + delete-SQL-tier).
+
+Verification ALL green: `moon run root:check` (incl openapi-check byte-identical +
+sqlc-check no drift), `moon run root:test-integration` (postgres:17-alpine, 5.5s),
+`go build`/`go vet`. Gotcha: a stale golangci-lint cache falsely flagged `modernize`
+on the moved generated `sqlc/db.go`; `golangci-lint cache clean` cleared it (the
+generated-file exclusion works fine) — matches the worktree-tooling-flakiness theme.
+
+**Shipped as PR #8** (https://github.com/meigma/template-go-api/pull/8), not yet
+merged. No go.mod/go.sum changes (pure move). CI: only Kusari runs (ci/Pages are
+`.disabled`); **Kusari passed (21s)** — PR fully green, ready to squash-merge.
+Awaiting user go-ahead to merge.
