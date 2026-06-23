@@ -69,6 +69,13 @@ func (a *App) shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Close the database pool (when postgres) after the servers stop accepting
+	// requests, so no in-flight handler loses its connection mid-request.
+	if a.pool != nil {
+		a.logger.InfoContext(ctx, "closing database pool")
+		a.pool.Close()
+	}
+
 	a.logger.InfoContext(shutdownCtx, "servers stopped")
 
 	return errors.Join(errs...)

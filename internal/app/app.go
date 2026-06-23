@@ -3,16 +3,19 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
 	"github.com/meigma/template-go-api/internal/adapter/http/todoapi"
 	"github.com/meigma/template-go-api/internal/adapter/memory"
+	"github.com/meigma/template-go-api/internal/adapter/postgres"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
@@ -24,12 +27,23 @@ type App struct {
 	metricsServer *http.Server
 	logger        *slog.Logger
 	grace         time.Duration
+	// pool is the PostgreSQL connection pool when store=postgres, closed during
+	// graceful shutdown. It is nil for the in-memory store.
+	pool *pgxpool.Pool
 }
 
 // New wires the application from cfg and logger. version is reported in the
-// OpenAPI document served by the API.
-func New(cfg config.Config, logger *slog.Logger, version string) *App {
-	service := todo.NewService(memory.NewTodoRepository(), logger)
+// OpenAPI document served by the API. When the postgres store is selected it
+// connects a connection pool (which needs ctx and can fail), so New returns an
+// error; the caller owns running and shutting the App down (which closes the
+// pool).
+func New(ctx context.Context, cfg config.Config, logger *slog.Logger, version string) (*App, error) {
+	repo, pool, readiness, err := selectStore(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	service := todo.NewService(repo, logger)
 	metrics := observability.NewMetrics()
 
 	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
@@ -43,10 +57,9 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 		RequestTimeout:       cfg.RequestTimeout,
 		CORSAllowedOrigins:   cfg.CORSAllowedOrigins,
 		TrustedProxyHeader:   cfg.TrustedProxyHeader,
-		// The in-memory store has nothing to probe, so /readyz is always ready.
-		// Wire real checks here when adding a backing datastore, for example:
-		//   Readiness: []adapterhttp.ReadinessCheck{{Name: "store", Check: repo.Ping}},
-		Readiness: nil,
+		// The in-memory store has nothing to probe, so /readyz is always ready;
+		// the postgres store contributes a real connectivity check here.
+		Readiness: readiness,
 		Register:  registerResources(service),
 	})
 
@@ -76,7 +89,30 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 		metricsServer: metricsServer,
 		logger:        logger,
 		grace:         cfg.ShutdownGrace,
+		pool:          pool,
+	}, nil
+}
+
+// selectStore builds the todo.Repository for the configured store. For postgres
+// it also returns the pool (for shutdown) and a readiness check; for memory both
+// are nil and readiness is empty.
+func selectStore(
+	ctx context.Context,
+	cfg config.Config,
+) (todo.Repository, *pgxpool.Pool, []adapterhttp.ReadinessCheck, error) {
+	if cfg.Store != config.StorePostgres {
+		return memory.NewTodoRepository(), nil, nil, nil
 	}
+
+	pool, err := postgres.Connect(ctx, postgres.Config{URL: cfg.DatabaseURL, MaxConns: cfg.DBMaxConns})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("connect postgres: %w", err)
+	}
+
+	repo := postgres.NewTodoRepository(pool)
+	readiness := []adapterhttp.ReadinessCheck{{Name: "postgres", Check: repo.Ping}}
+
+	return repo, pool, readiness, nil
 }
 
 // Handler returns the assembled HTTP handler, primarily for functional tests.

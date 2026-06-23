@@ -30,7 +30,11 @@ func runServe(cmd *cobra.Command, options Options) error {
 	}
 
 	logger := observability.NewLogger(options.Err, observability.ParseLevel(cfg.LogLevel), cfg.LogFormat)
-	application := app.New(cfg, logger, options.Build.Version)
+
+	application, err := app.New(cmd.Context(), cfg, logger, options.Build.Version)
+	if err != nil {
+		return fmt.Errorf("build application: %w", err)
+	}
 
 	if err := application.Run(cmd.Context()); err != nil {
 		return fmt.Errorf("run server: %w", err)

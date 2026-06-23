@@ -75,6 +75,7 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.AddCommand(newServeCommand(options))
 	root.AddCommand(newVersionCommand(options))
 	root.AddCommand(newOpenAPICommand(options))
+	root.AddCommand(newMigrateCommand(options))
 
 	return root
 }

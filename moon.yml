@@ -131,6 +131,20 @@ tasks:
     options:
       cache: false
 
+  # Run the embedded database migrations for local development. Pass the goose
+  # verb and connection URL through, for example:
+  #   moon run root:migrate -- up --database-url postgres://localhost:5432/app
+  # Migrations are explicit and never run automatically by serve.
+  migrate:
+    command: 'go run ./cmd/template-go-api migrate'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+      - 'internal/adapter/postgres/migrations/*.sql'
+    options:
+      cache: false
+      runInCI: false
+
   check:
     deps:
       - 'root:format'
