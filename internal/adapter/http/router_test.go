@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -162,4 +164,126 @@ func get(t *testing.T, srv *httptest.Server, path string) testResponse {
 		body:        string(data),
 		contentType: resp.Header.Get("Content-Type"),
 	}
+}
+
+// TestCORSPreflightAllowsConfiguredOrigin verifies a preflight against a
+// configured origin returns the allow-origin and Vary headers.
+func TestCORSPreflightAllowsConfiguredOrigin(t *testing.T) {
+	t.Parallel()
+
+	srv := corsTestServer(t, []string{"https://app.example"})
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodOptions, srv.URL+"/todos", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://app.example")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "https://app.example", resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, resp.Header.Get("Vary"), "Origin")
+}
+
+// TestCORSDisabledByDefault verifies that with no configured origins the server
+// emits no CORS headers at all (the safe template default).
+func TestCORSDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	srv := corsTestServer(t, nil)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/healthz", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://app.example")
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+}
+
+func corsTestServer(t *testing.T, origins []string) *httptest.Server {
+	t.Helper()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:             discard,
+		Metrics:            observability.NewMetrics(),
+		Version:            "test",
+		RequestTimeout:     testRequestTimeout,
+		CORSAllowedOrigins: origins,
+		Readiness:          nil,
+		Register:           nil,
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+// TestClientIPResolution verifies the trust model: by default a forged proxy
+// header is ignored and the access log records the TCP peer, but a configured
+// trusted header is honored. The handler is driven synchronously so the shared
+// log buffer is written and read on one goroutine.
+func TestClientIPResolution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		trustedHeader string
+		wantClientIP  string
+	}{
+		{name: "ignores forged header by default", trustedHeader: "", wantClientIP: "192.0.2.1"},
+		{name: "honors trusted header", trustedHeader: "X-Real-IP", wantClientIP: "203.0.113.7"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			logger := observability.NewLogger(&buf, slog.LevelInfo, "json")
+			handler := NewRouter(RouterDeps{
+				Logger:             logger,
+				Metrics:            observability.NewMetrics(),
+				Version:            "test",
+				RequestTimeout:     testRequestTimeout,
+				TrustedProxyHeader: tt.trustedHeader,
+				Readiness:          nil,
+				Register:           nil,
+			})
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil) // RemoteAddr 192.0.2.1:1234
+			req.Header.Set("X-Real-IP", "203.0.113.7")
+			handler.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, tt.wantClientIP, findAccessLog(t, buf.String())["client_ip"])
+		})
+	}
+}
+
+// findAccessLog returns the parsed "http request" access-log line from logs.
+func findAccessLog(t *testing.T, logs string) map[string]any {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
+		if line == "" {
+			continue
+		}
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["msg"] == "http request" {
+			return entry
+		}
+	}
+
+	t.Fatalf("no access-log line in:\n%s", logs)
+
+	return nil
 }
