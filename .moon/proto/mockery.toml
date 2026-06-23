@@ -1,0 +1,25 @@
+name = "mockery"
+type = "cli"
+
+[platform.macos]
+download-file = "mockery_{version}_Darwin_{arch}.tar.gz"
+exe-path = "mockery"
+
+[platform.linux]
+download-file = "mockery_{version}_Linux_{arch}.tar.gz"
+exe-path = "mockery"
+
+[platform.windows]
+download-file = "mockery_{version}_Windows_{arch}.tar.gz"
+exe-path = "mockery.exe"
+
+[install]
+download-url = "https://github.com/vektra/mockery/releases/download/v{version}/{download_file}"
+checksum-url = "https://github.com/vektra/mockery/releases/download/v{version}/checksum.txt"
+
+[install.arch]
+aarch64 = "arm64"
+x86_64 = "x86_64"
+
+[resolve]
+git-url = "https://github.com/vektra/mockery"

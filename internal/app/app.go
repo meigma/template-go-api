@@ -1,6 +1,6 @@
-// Package app is the composition root: it wires the domain service, the selected
-// persistence adapter (in-memory or PostgreSQL), observability, and the HTTP
-// server into a runnable App.
+// Package app is the composition root: it wires the domain service, the
+// PostgreSQL persistence adapter, observability, and the HTTP server into a
+// runnable App.
 package app
 
 import (
@@ -19,7 +19,6 @@ import (
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
 	"github.com/meigma/template-go-api/internal/todo/httpapi"
-	"github.com/meigma/template-go-api/internal/todo/memory"
 	todopostgres "github.com/meigma/template-go-api/internal/todo/postgres"
 )
 
@@ -29,17 +28,45 @@ type App struct {
 	metricsServer *http.Server
 	logger        *slog.Logger
 	grace         time.Duration
-	// pool is the PostgreSQL connection pool when store=postgres, closed during
-	// graceful shutdown. It is nil for the in-memory store.
+	// pool is the PostgreSQL connection pool, closed during graceful shutdown.
+	// It is nil when a repository is injected with WithRepository (tests).
 	pool *pgxpool.Pool
 }
 
+// Option configures how New wires the application.
+type Option func(*options)
+
+type options struct {
+	repo todo.Repository
+}
+
+// WithRepository injects a ready-made todo.Repository instead of connecting the
+// PostgreSQL adapter. It lets tests wire the full server without a database, and
+// gives integrators a seam to plug in an alternative adapter without editing the
+// composition root.
+func WithRepository(repo todo.Repository) Option {
+	return func(o *options) {
+		o.repo = repo
+	}
+}
+
 // New wires the application from cfg and logger. version is reported in the
-// OpenAPI document served by the API. When the postgres store is selected it
-// connects a connection pool, which can fail. The caller owns running and
-// shutting the App down, which closes the pool.
-func New(ctx context.Context, cfg config.Config, logger *slog.Logger, version string) (*App, error) {
-	repo, pool, readiness, err := selectStore(ctx, cfg)
+// OpenAPI document served by the API. Unless a repository is injected with
+// WithRepository, it connects a PostgreSQL connection pool, which can fail. The
+// caller owns running and shutting the App down, which closes the pool.
+func New(
+	ctx context.Context,
+	cfg config.Config,
+	logger *slog.Logger,
+	version string,
+	opts ...Option,
+) (*App, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	repo, pool, readiness, err := resolveStore(ctx, cfg, o.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +85,8 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, version st
 		RequestTimeout:       cfg.RequestTimeout,
 		CORSAllowedOrigins:   cfg.CORSAllowedOrigins,
 		TrustedProxyHeader:   cfg.TrustedProxyHeader,
-		// The in-memory store has nothing to probe, so /readyz is always ready;
-		// the postgres store contributes a real connectivity check here.
+		// The postgres store contributes a real connectivity check here; an
+		// injected repository (tests) contributes none, so /readyz is always ready.
 		Readiness: readiness,
 		Register:  registerResources(service),
 	})
@@ -94,15 +121,17 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, version st
 	}, nil
 }
 
-// selectStore builds the todo.Repository for the configured store. For postgres
-// it also returns the pool (for shutdown) and a readiness check; for memory both
-// are nil and readiness is empty.
-func selectStore(
+// resolveStore returns the todo.Repository to wire. An injected repository is
+// used as-is with no pool or readiness check (tests, or an integrator-supplied
+// adapter); otherwise it connects the PostgreSQL adapter and returns the pool
+// (for shutdown) and a connectivity readiness check.
+func resolveStore(
 	ctx context.Context,
 	cfg config.Config,
+	injected todo.Repository,
 ) (todo.Repository, *pgxpool.Pool, []adapterhttp.ReadinessCheck, error) {
-	if cfg.Store != config.StorePostgres {
-		return memory.NewTodoRepository(), nil, nil, nil
+	if injected != nil {
+		return injected, nil, nil, nil
 	}
 
 	pool, err := postgres.Connect(ctx, postgres.Config{URL: cfg.DatabaseURL, MaxConns: cfg.DBMaxConns})
@@ -122,9 +151,11 @@ func (a *App) Handler() http.Handler {
 }
 
 // OpenAPIYAML builds the API without binding a listener and returns the
-// OpenAPI 3.0.3 specification as YAML.
+// OpenAPI 3.0.3 specification as YAML. The repository is never invoked while
+// generating the spec, so a no-op stub stands in for the real adapter and no
+// database connection is required.
 func OpenAPIYAML(version string) ([]byte, error) {
-	service := todo.NewService(memory.NewTodoRepository(), nil)
+	service := todo.NewService(noopRepository{}, nil)
 
 	spec, err := adapterhttp.SpecYAML(version, registerResources(service))
 	if err != nil {
@@ -133,6 +164,19 @@ func OpenAPIYAML(version string) ([]byte, error) {
 
 	return spec, nil
 }
+
+// noopRepository is a todo.Repository that performs no persistence. It exists
+// solely to construct the service when generating the OpenAPI document
+// server-lessly, where the repository is never invoked.
+type noopRepository struct{}
+
+func (noopRepository) Save(_ context.Context, _ todo.Todo) error { return nil }
+
+func (noopRepository) FindByID(_ context.Context, _ string) (todo.Todo, error) {
+	return todo.Todo{}, todo.ErrNotFound
+}
+
+func (noopRepository) List(_ context.Context) ([]todo.Todo, error) { return nil, nil }
 
 // registerResources composes the per-resource HTTP adapters mounted on the API.
 // Add a new resource by constructing its service above and adding one Register

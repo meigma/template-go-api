@@ -81,7 +81,8 @@ func (a *App) shutdown(ctx context.Context) error {
 // closePool closes the PostgreSQL pool when one is configured. It is deferred in
 // Run so it executes on every exit path — graceful shutdown or a server failing
 // to start — after the servers have returned, so no in-flight handler loses its
-// connection mid-request. It is a no-op for the in-memory store.
+// connection mid-request. It is a no-op when no pool was opened (for example,
+// a repository injected with WithRepository in tests).
 func (a *App) closePool(ctx context.Context) {
 	if a.pool == nil {
 		return

@@ -1,4 +1,4 @@
-package todo
+package todo_test
 
 import (
 	"context"
@@ -7,118 +7,116 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/template-go-api/internal/todo"
+	"github.com/meigma/template-go-api/internal/todo/mocks"
 )
 
-type fakeRepo struct {
-	saved   map[string]Todo
-	listErr error
+const fixedID = "fixed-id"
+
+// fixedClock is the deterministic time source the service uses in these tests.
+func fixedClock() time.Time {
+	return time.Date(2026, time.June, 22, 13, 0, 0, 0, time.UTC)
 }
 
-func newFakeRepo() *fakeRepo {
-	return &fakeRepo{saved: map[string]Todo{}, listErr: nil}
+// serviceFixture bundles the mocked repository and the service under test.
+type serviceFixture struct {
+	repo    *mocks.Repository
+	service *todo.Service
 }
 
-func (f *fakeRepo) Save(_ context.Context, t Todo) error {
-	f.saved[t.ID] = t
+// newServiceFixture builds a Service backed by a strict mock repository with a
+// fixed clock and ID generator, so persisted entities are fully deterministic.
+func newServiceFixture(t *testing.T) *serviceFixture {
+	t.Helper()
 
-	return nil
-}
-
-func (f *fakeRepo) FindByID(_ context.Context, id string) (Todo, error) {
-	stored, ok := f.saved[id]
-	if !ok {
-		return Todo{}, ErrNotFound
-	}
-
-	return stored, nil
-}
-
-func (f *fakeRepo) List(_ context.Context) ([]Todo, error) {
-	if f.listErr != nil {
-		return nil, f.listErr
-	}
-
-	todos := make([]Todo, 0, len(f.saved))
-	for _, t := range f.saved {
-		todos = append(todos, t)
-	}
-
-	return todos, nil
-}
-
-func newTestService(repo Repository) *Service {
-	fixed := time.Date(2026, time.June, 22, 13, 0, 0, 0, time.UTC)
-
-	return NewService(repo, nil,
-		WithClock(func() time.Time { return fixed }),
-		WithIDGenerator(func() string { return "fixed-id" }),
+	repo := mocks.NewRepository(t)
+	service := todo.NewService(repo, nil,
+		todo.WithClock(fixedClock),
+		todo.WithIDGenerator(func() string { return fixedID }),
 	)
+
+	return &serviceFixture{repo: repo, service: service}
 }
 
 func TestServiceCreate(t *testing.T) {
 	t.Parallel()
 
-	repo := newFakeRepo()
-	svc := newTestService(repo)
+	fix := newServiceFixture(t)
+	fix.repo.EXPECT().
+		Save(mock.Anything, mock.MatchedBy(func(saved todo.Todo) bool {
+			return saved.ID == fixedID && saved.Status == todo.StatusOpen && saved.Title == "buy milk"
+		})).
+		Return(nil)
 
-	got, err := svc.Create(context.Background(), "buy milk")
+	got, err := fix.service.Create(context.Background(), "buy milk")
 	require.NoError(t, err)
-	assert.Equal(t, "fixed-id", got.ID)
-	assert.Equal(t, StatusOpen, got.Status)
-	assert.Contains(t, repo.saved, "fixed-id")
+	assert.Equal(t, fixedID, got.ID)
+	assert.Equal(t, todo.StatusOpen, got.Status)
+	assert.Equal(t, "buy milk", got.Title)
 }
 
 func TestServiceCreateInvalid(t *testing.T) {
 	t.Parallel()
 
-	repo := newFakeRepo()
-	svc := newTestService(repo)
-
-	_, err := svc.Create(context.Background(), "   ")
-	require.ErrorIs(t, err, ErrInvalidTitle)
-	assert.Empty(t, repo.saved)
+	fix := newServiceFixture(t)
+	// No Save expectation: the strict mock fails the test if an invalid title is
+	// ever persisted.
+	_, err := fix.service.Create(context.Background(), "   ")
+	require.ErrorIs(t, err, todo.ErrInvalidTitle)
 }
 
 func TestServiceGetNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(newFakeRepo())
+	fix := newServiceFixture(t)
+	fix.repo.EXPECT().FindByID(mock.Anything, "missing").Return(todo.Todo{}, todo.ErrNotFound)
 
-	_, err := svc.Get(context.Background(), "missing")
-	require.ErrorIs(t, err, ErrNotFound)
+	_, err := fix.service.Get(context.Background(), "missing")
+	require.ErrorIs(t, err, todo.ErrNotFound)
 }
 
 func TestServiceComplete(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(newFakeRepo())
+	fix := newServiceFixture(t)
+	existing := todo.Todo{
+		ID:        fixedID,
+		Title:     "buy milk",
+		Status:    todo.StatusOpen,
+		CreatedAt: fixedClock(),
+	}
+	fix.repo.EXPECT().FindByID(mock.Anything, fixedID).Return(existing, nil)
+	fix.repo.EXPECT().
+		Save(mock.Anything, mock.MatchedBy(func(saved todo.Todo) bool {
+			return saved.ID == fixedID && saved.Status == todo.StatusCompleted && saved.CompletedAt != nil
+		})).
+		Return(nil)
 
-	created, err := svc.Create(context.Background(), "buy milk")
+	completed, err := fix.service.Complete(context.Background(), fixedID)
 	require.NoError(t, err)
-
-	completed, err := svc.Complete(context.Background(), created.ID)
-	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, completed.Status)
+	assert.Equal(t, todo.StatusCompleted, completed.Status)
 	require.NotNil(t, completed.CompletedAt)
 }
 
 func TestServiceCompleteNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(newFakeRepo())
+	fix := newServiceFixture(t)
+	fix.repo.EXPECT().FindByID(mock.Anything, "missing").Return(todo.Todo{}, todo.ErrNotFound)
 
-	_, err := svc.Complete(context.Background(), "missing")
-	require.ErrorIs(t, err, ErrNotFound)
+	_, err := fix.service.Complete(context.Background(), "missing")
+	require.ErrorIs(t, err, todo.ErrNotFound)
 }
 
 func TestServiceListPropagatesError(t *testing.T) {
 	t.Parallel()
 
-	repo := newFakeRepo()
-	repo.listErr = errors.New("boom")
-	svc := newTestService(repo)
+	fix := newServiceFixture(t)
+	fix.repo.EXPECT().List(mock.Anything).Return(nil, errors.New("boom"))
 
-	_, err := svc.List(context.Background())
+	_, err := fix.service.List(context.Background())
 	require.Error(t, err)
 }

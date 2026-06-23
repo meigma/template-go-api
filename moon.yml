@@ -26,6 +26,13 @@ fileGroups:
     - 'internal/todo/postgres/queries/*.sql'
     - '.prototools'
     - '.moon/proto/sqlc.toml'
+  # Inputs that drive mockery code generation: the config plus the source files
+  # declaring the mocked interfaces (the outbound ports).
+  mockerySources:
+    - '.mockery.yaml'
+    - 'internal/todo/ports.go'
+    - '.prototools'
+    - '.moon/proto/mockery.toml'
   lintConfig:
     - '.golangci.yml'
     - '.prototools'
@@ -131,6 +138,39 @@ tasks:
     options:
       cache: false
 
+  # Regenerate the committed testify mocks from the outbound ports. Run after
+  # changing a mocked interface, then commit the result.
+  mockery:
+    command: 'proto run mockery'
+    toolchains: ['go']
+    inputs:
+      - '@group(mockerySources)'
+    outputs:
+      - 'internal/todo/mocks/*.go'
+    options:
+      cache: false
+
+  # Drift-guard: regenerate the mocks into a throwaway directory and fail if they
+  # differ from the committed package, so the generated code can never fall out of
+  # sync with the interfaces. mockery resolves `dir` relative to the working
+  # directory, so the temp dir lives under the repo root and is cleaned up on
+  # exit. Writes no tracked file.
+  mockery-check:
+    script: |
+      set -eu
+      tmp="$(mktemp -d "${PWD}/.mockery-check.XXXXXX")"
+      cfg="${tmp}.yaml"
+      trap 'rm -rf "$tmp" "$cfg"' EXIT
+      sed "s|dir: \"{{.InterfaceDir}}/mocks\"|dir: ${tmp#"${PWD}/"}|" .mockery.yaml > "$cfg"
+      proto run mockery -- --config "$cfg"
+      git diff --no-index --exit-code -- internal/todo/mocks "$tmp"
+    toolchains: ['go']
+    inputs:
+      - '@group(mockerySources)'
+      - 'internal/todo/mocks/*.go'
+    options:
+      cache: false
+
   # Run the container-backed integration suite (gated by the `integration` build
   # tag, so the default `test`/`check` stay hermetic). Requires a running Docker
   # daemon; testcontainers starts a throwaway Postgres per run. Wiring this into
@@ -168,6 +208,7 @@ tasks:
       - 'root:test'
       - 'root:openapi-check'
       - 'root:sqlc-check'
+      - 'root:mockery-check'
       - 'docs:build'
     inputs:
       - '@group(goSources)'

@@ -23,18 +23,7 @@ const (
 	defaultShutdownGrace     = 15 * time.Second
 	defaultLogLevel          = "info"
 	defaultLogFormat         = "json"
-	defaultStore             = StoreMemory
 	defaultDBMaxConns        = 0
-)
-
-// Store names a backing persistence implementation selectable at runtime.
-type Store string
-
-const (
-	// StoreMemory selects the zero-infrastructure in-memory adapter.
-	StoreMemory Store = "memory"
-	// StorePostgres selects the PostgreSQL adapter, which requires a database URL.
-	StorePostgres Store = "postgres"
 )
 
 // Config holds runtime settings for the API server.
@@ -67,11 +56,8 @@ type Config struct {
 	// read the client IP from. Empty (the default) trusts only the direct TCP
 	// peer, which cannot be spoofed.
 	TrustedProxyHeader string
-	// Store selects the persistence backend (memory or postgres). The default
-	// (memory) keeps the template runnable with no database.
-	Store Store
-	// DatabaseURL is the PostgreSQL connection string. It is required when Store
-	// is postgres and ignored otherwise.
+	// DatabaseURL is the PostgreSQL connection string. It is required: the
+	// template persists exclusively to PostgreSQL.
 	DatabaseURL string
 	// DBMaxConns caps the PostgreSQL connection pool size. Zero leaves the
 	// driver default in place.
@@ -101,8 +87,7 @@ func RegisterFlags(flags *pflag.FlagSet) {
 		"",
 		"proxy header to read the client IP from (for example X-Real-IP); empty trusts the TCP peer",
 	)
-	flags.String("store", string(defaultStore), "persistence backend: memory or postgres")
-	flags.String("database-url", "", "PostgreSQL connection URL (required when --store=postgres)")
+	flags.String("database-url", "", "PostgreSQL connection URL (required)")
 	flags.Int32("db-max-conns", defaultDBMaxConns, "maximum PostgreSQL pool connections; 0 uses the driver default")
 }
 
@@ -123,7 +108,6 @@ func Load(vp *viper.Viper) Config {
 		LogFormat:          vp.GetString("log-format"),
 		CORSAllowedOrigins: vp.GetStringSlice("cors-allowed-origins"),
 		TrustedProxyHeader: vp.GetString("trusted-proxy-header"),
-		Store:              Store(vp.GetString("store")),
 		DatabaseURL:        vp.GetString("database-url"),
 		DBMaxConns:         vp.GetInt32("db-max-conns"),
 	}
@@ -146,27 +130,11 @@ func (c Config) Validate() error {
 	if c.LogFormat != "json" && c.LogFormat != "text" {
 		return fmt.Errorf("log-format must be %q or %q, got %q", "json", "text", c.LogFormat)
 	}
-	if err := c.validateStore(); err != nil {
-		return err
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		return errors.New("database-url is required")
 	}
 
 	return nil
-}
-
-// validateStore checks the store selection and its dependent settings.
-func (c Config) validateStore() error {
-	switch c.Store {
-	case StoreMemory:
-		return nil
-	case StorePostgres:
-		if strings.TrimSpace(c.DatabaseURL) == "" {
-			return errors.New("database-url is required when store is postgres")
-		}
-
-		return nil
-	default:
-		return fmt.Errorf("store must be %q or %q, got %q", StoreMemory, StorePostgres, c.Store)
-	}
 }
 
 func setDefaults(vp *viper.Viper) {
@@ -182,7 +150,6 @@ func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("log-format", defaultLogFormat)
 	vp.SetDefault("cors-allowed-origins", []string{})
 	vp.SetDefault("trusted-proxy-header", "")
-	vp.SetDefault("store", string(defaultStore))
 	vp.SetDefault("database-url", "")
 	vp.SetDefault("db-max-conns", defaultDBMaxConns)
 }

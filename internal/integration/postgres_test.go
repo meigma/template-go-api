@@ -54,9 +54,9 @@ func assertTodoEqual(t *testing.T, want, got todo.Todo) {
 		"completed_at: want %s, got %s", *want.CompletedAt, *got.CompletedAt)
 }
 
-// TestRepository exercises the PostgreSQL adapter against the same behavioral
-// contract the in-memory adapter satisfies, plus the upsert and time-replacement
-// semantics specific to the SQL store. It shares one migrated container and
+// TestRepository exercises the PostgreSQL adapter against the todo.Repository
+// behavioral contract, plus the upsert and time-replacement semantics specific
+// to the SQL store. It shares one migrated container and
 // restores the clean snapshot between subtests for isolation, so the subtests
 // run sequentially rather than in parallel.
 func TestRepository(t *testing.T) {
@@ -85,7 +85,7 @@ func TestRepository(t *testing.T) {
 		repo := fix.Reset(ctx, t)
 
 		// A syntactically invalid id can never match a stored uuid, so the
-		// adapter maps it to ErrNotFound like the in-memory peer.
+		// adapter maps it to ErrNotFound rather than surfacing a driver error.
 		_, err := repo.FindByID(ctx, "not-a-uuid")
 		require.ErrorIs(t, err, todo.ErrNotFound)
 	})
@@ -134,8 +134,7 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, repo.Save(ctx, original))
 
 		// Re-save under the same id: Save is a full insert-or-replace, so every
-		// mutable field (including created_at) is overwritten, matching the
-		// in-memory adapter exactly.
+		// mutable field (including created_at) is overwritten.
 		completedAt := original.CreatedAt.Add(2 * time.Hour)
 		updated := todo.Todo{
 			ID:          original.ID,

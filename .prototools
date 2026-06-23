@@ -1,8 +1,10 @@
 golangci-lint = "=2.12.2"
 goose = "=3.27.1"
+mockery = "=3.7.1"
 sqlc = "=1.31.1"
 
 [plugins.tools]
 golangci-lint = "file://.moon/proto/golangci-lint.toml"
 goose = "file://.moon/proto/goose.toml"
+mockery = "file://.moon/proto/mockery.toml"
 sqlc = "file://.moon/proto/sqlc.toml"

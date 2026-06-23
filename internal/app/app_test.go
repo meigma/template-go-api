@@ -16,6 +16,7 @@ import (
 	"github.com/meigma/template-go-api/internal/app"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
+	"github.com/meigma/template-go-api/internal/todo/todotest"
 )
 
 func TestAppWiring(t *testing.T) {
@@ -23,7 +24,13 @@ func TestAppWiring(t *testing.T) {
 
 	cfg := config.Load(viper.New())
 	logger := observability.NewLogger(io.Discard, slog.LevelError, "json")
-	application, err := app.New(context.Background(), cfg, logger, "test")
+	// Inject an in-memory repository so the composition root wires a working
+	// server without a database — the postgres path is covered by the
+	// container-backed integration suite.
+	application, err := app.New(
+		context.Background(), cfg, logger, "test",
+		app.WithRepository(todotest.NewRepository()),
+	)
 	require.NoError(t, err)
 
 	handler := application.Handler()
