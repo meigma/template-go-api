@@ -273,3 +273,25 @@ Reusable convention for this template: integration tests → `internal/integrati
 (package `integration`, `//go:build integration`, `doc.go` anchor); unit tests
 stay beside code.
 
+## 2026-06-23 — Merged (squash 18b56e7)
+User: "LGTM. Please merge." Pre-merge CI check found **Kusari Inspector FAIL**:
+(1) CRITICAL — `golang.org/x/crypto v0.51.0`, 13 active CVEs; (2) license note —
+`opencontainers/go-digest` CC-BY-SA-4.0 (doc-only) via goose. Held the merge and
+surfaced it. Found x/crypto was NOT on master — this PR's new deps
+(goose/testcontainers) pulled it into the module graph (and `go mod why` showed
+it's not actually imported into our build). Fixed by pinning
+`golang.org/x/crypto v0.53.0` (indirect override) + `go mod tidy` (commit
+`6c95d6e`); root:check green. On the re-run, **Kusari passed** — so the
+go-digest license note was advisory/non-blocking (left as-is; a future org-policy
+tightening could allowlist or replace it, but it gates nothing).
+
+CI on `6c95d6e`: ci ✅, Pages ✅, Kusari ✅, merge state CLEAN. Squash-merged PR #6
+→ `master 18b56e7` (`--delete-branch`; the local post-merge switch errored on the
+worktree layout, harmless). Cleanup: pulled master, deleted remote
+`feat/postgres-tier`, removed the local worktree (`wt remove`, tree matched
+master). Worktrees back to master + journal only.
+
+PostgreSQL tier is DONE and on master. Remaining future-slice follow-up (no date):
+wire `test-integration` into CI once the `.disabled` GitHub workflows get a
+Docker-capable runner. Session ready for `session-close`.
+

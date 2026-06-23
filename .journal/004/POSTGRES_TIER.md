@@ -102,8 +102,11 @@ internal/adapter/postgres/
 │   └── 00001_create_todos.sql        # goose Up/Down — the single schema source sqlc reads
 ├── queries/
 │   └── todos.sql                     # hand-written sqlc queries (named -- name: ... :one/:many/:exec)
-├── sqlc/                             # GENERATED, COMMITTED (DO NOT EDIT): db.go, models.go, querier.go, todos.sql.go
-└── repository_test.go   # //go:build integration — testcontainers Postgres + snapshot/restore
+└── sqlc/                             # GENERATED, COMMITTED (DO NOT EDIT): db.go, models.go, querier.go, todos.sql.go
+internal/integration/                # cross-package integration tests (package integration)
+├── doc.go                            # package anchor (no build tag) so default `go test ./...` is happy
+├── postgres_fixture_test.go          # //go:build integration — testcontainers fixture: container + migrate + snapshot + Reset
+└── postgres_test.go                  # //go:build integration — adapter contract tests through the public API
 sqlc.yaml                            # repo root
 ```
 
@@ -244,10 +247,16 @@ Ship **no** builder dependency. `List` stays parameter-free for now. Add:
 
 ## Testing (testcontainers)
 
-- `repository_test.go` (`//go:build integration`): start the testcontainers
-  Postgres module (`postgres.Run(ctx, image, opts...)`), apply embedded goose
-  migrations, `Snapshot()` once, then `Restore()` between tests for fast
-  isolation. Do not name the database "postgres"; mind non-default usernames.
+Integration tests live in their own package, **`internal/integration`** (package
+`integration`, `//go:build integration`) — NOT beside the adapter code — so they
+are easy to find and are forced through the adapters' public APIs. A `doc.go`
+anchors the package so the default `go test ./...` is happy with a tag-only dir.
+
+- `postgres_fixture_test.go` + `postgres_test.go` (`//go:build integration`):
+  start the testcontainers Postgres module (`tcpostgres.Run(ctx, image, opts...)`),
+  apply embedded goose migrations, `Snapshot()` once, then `Restore()` between
+  tests for fast isolation. Do not name the database "postgres"; mind non-default
+  usernames.
 - Verify the adapter against the same behavioral contract the memory adapter
   satisfies (save/get/list/upsert-idempotency/not-found). Save is full
   insert-or-replace in BOTH adapters (created_at included), so the contract may
@@ -318,7 +327,7 @@ template runs with `--store=memory` (zero infra) and `--store=postgres` (real DB
 with migrations + readiness); generated code committed and drift-guarded; docs
 updated; domain & transport unchanged. Integrate via a GitHub PR (squash merge).
 
-**ACHIEVED (2026-06-23):** all four phases done; whole-tier validation green
+**MERGED (2026-06-23):** all four phases done; whole-tier validation green
 (root:check + live integration container). Shipped as **PR #6**
-(https://github.com/meigma/template-go-api/pull/6), branch `feat/postgres-tier`,
-awaiting review/squash-merge.
+(https://github.com/meigma/template-go-api/pull/6) and **squash-merged to
+`master` as `18b56e7`**. Branch + worktree cleaned up. Done.
