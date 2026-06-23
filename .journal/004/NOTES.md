@@ -72,3 +72,27 @@ pick, Bob's maturity, pgx vs database/sql. Feeds the open "Postgres adapter +
 testcontainers" seam — a DESIGN decision, not yet a build (keep separate per
 `separate-mechanical-from-design-work`).
 
+## 2026-06-22 19:05 — Design approved; building PostgreSQL tier via gated workflow
+Collaborated to a final design (verified Atlas's open-core/paywall trajectory →
+chose goose; explained dynamic-query ladder + the port-leak concern; grounded
+Bob at v0.47 pre-1.0 → documented-alternative, not default). User answered open
+questions: pgx ✓, goose ✓, sqlc-only dynamic default ✓, Bob/Squirrel as
+port-hidden escape hatches ✓. User: "LGTM."
+
+Locked stack: **pgx/v5 + sqlc (committed+drift-guarded) + goose (embedded,
+explicit `migrate` subcommand) + testcontainers (snapshot/restore, build-tagged)**;
+`--store=memory|postgres` (memory default); `app.New` gains `(ctx) (…, error)` +
+pool lifecycle + postgres `/readyz`; domain & transport untouched.
+
+Saved authoritative design doc → `.journal/004/POSTGRES_TIER.md` (temporary,
+journal-only, mirrors TARGET_SHAPE.md's role; it is the source of truth for the
+implementation agents).
+
+Execution model: a single background workflow can't pause for human input, so
+"gates after each phase" = **one workflow run per phase** (implement → adversarial
+review → fix → validate), with me holding the human gate between phases. Phases
+A (tooling+schema+generated), B (adapter+wiring+config+migrate), C (integration
+tests), D (docs). Implementation on branch `feat/postgres-tier` in its own
+worktree; integrate via squash-merged PR. Workflow: `implement-postgres-phase`.
+Started Phase A with user's standing permission to execute.
+
