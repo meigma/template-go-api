@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -45,7 +46,7 @@ func newMigrateVerbCommand(options Options, verb, short string) *cobra.Command {
 // command against the embedded migrations.
 func runMigrate(cmd *cobra.Command, options Options, verb string) error {
 	cfg := config.Load(options.Viper)
-	if cfg.DatabaseURL == "" {
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return fmt.Errorf("database-url is required for migrate %s", verb)
 	}
 

@@ -5,6 +5,7 @@ VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE
   SET title = EXCLUDED.title,
       status = EXCLUDED.status,
+      created_at = EXCLUDED.created_at,
       completed_at = EXCLUDED.completed_at;
 
 -- name: GetTodo :one

@@ -32,7 +32,7 @@ func Migrate(ctx context.Context, databaseURL, command string, args ...string) e
 		return fmt.Errorf("set goose dialect: %w", err)
 	}
 
-	if err := goose.RunContext(ctx, command, db, MigrationsDir, args...); err != nil {
+	if err := goose.RunContext(ctx, command, db, migrationsDir, args...); err != nil {
 		return fmt.Errorf("goose %s: %w", command, err)
 	}
 

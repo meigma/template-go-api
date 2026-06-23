@@ -1,5 +1,6 @@
-// Package app is the composition root: it wires the domain service, the
-// in-memory adapter, observability, and the HTTP server into a runnable App.
+// Package app is the composition root: it wires the domain service, the selected
+// persistence adapter (in-memory or PostgreSQL), observability, and the HTTP
+// server into a runnable App.
 package app
 
 import (
