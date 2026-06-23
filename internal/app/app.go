@@ -20,9 +20,10 @@ import (
 
 // App is a fully wired API server ready to Run.
 type App struct {
-	server *http.Server
-	logger *slog.Logger
-	grace  time.Duration
+	server        *http.Server
+	metricsServer *http.Server
+	logger        *slog.Logger
+	grace         time.Duration
 }
 
 // New wires the application from cfg and logger. version is reported in the
@@ -30,13 +31,23 @@ type App struct {
 func New(cfg config.Config, logger *slog.Logger, version string) *App {
 	service := todo.NewService(memory.NewTodoRepository(), logger)
 	metrics := observability.NewMetrics()
+
+	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
+	// dedicated metrics server (below) serves it off the API surface.
+	serveMetricsInline := cfg.MetricsAddr == ""
 	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
-		Logger:         logger,
-		Metrics:        metrics,
-		Version:        version,
-		RequestTimeout: cfg.RequestTimeout,
-		Readiness:      nil,
-		Register:       registerResources(service),
+		Logger:               logger,
+		Metrics:              metrics,
+		ServeMetricsEndpoint: serveMetricsInline,
+		Version:              version,
+		RequestTimeout:       cfg.RequestTimeout,
+		CORSAllowedOrigins:   cfg.CORSAllowedOrigins,
+		TrustedProxyHeader:   cfg.TrustedProxyHeader,
+		// The in-memory store has nothing to probe, so /readyz is always ready.
+		// Wire real checks here when adding a backing datastore, for example:
+		//   Readiness: []adapterhttp.ReadinessCheck{{Name: "store", Check: repo.Ping}},
+		Readiness: nil,
+		Register:  registerResources(service),
 	})
 
 	server := &http.Server{
@@ -48,10 +59,23 @@ func New(cfg config.Config, logger *slog.Logger, version string) *App {
 		IdleTimeout:       cfg.IdleTimeout,
 	}
 
+	var metricsServer *http.Server
+	if !serveMetricsInline {
+		metricsServer = &http.Server{
+			Addr:              cfg.MetricsAddr,
+			Handler:           adapterhttp.NewMetricsHandler(metrics),
+			ReadTimeout:       cfg.ReadTimeout,
+			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+			WriteTimeout:      cfg.WriteTimeout,
+			IdleTimeout:       cfg.IdleTimeout,
+		}
+	}
+
 	return &App{
-		server: server,
-		logger: logger,
-		grace:  cfg.ShutdownGrace,
+		server:        server,
+		metricsServer: metricsServer,
+		logger:        logger,
+		grace:         cfg.ShutdownGrace,
 	}
 }
 

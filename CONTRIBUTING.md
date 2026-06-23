@@ -40,7 +40,10 @@ moon run root:format
 moon run root:lint
 moon run root:build
 moon run root:test
-go run ./cmd/template-go-api --version
+moon run docs:build              # build the docs site (renders the OpenAPI spec)
+
+./bin/template-go-api serve      # run the API server (after root:build)
+curl -sS localhost:8080/healthz  # smoke-test a running server
 ```
 
 ## Release Changes

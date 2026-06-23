@@ -35,9 +35,13 @@ theme:
 
 nav:
   - Home: index.md
+  - API Reference: api.md
 
 plugins:
   - search
+  # Renders docs/openapi.yaml into the API Reference page via the [OAD(...)] directive.
+  - neoteroi.mkdocsoad:
+      use_pymdownx: true
 
 markdown_extensions:
   - admonition
@@ -49,6 +53,11 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
 
 extra_css:
   - stylesheets/palette.css
+  # Vendored from the neoteroi-mkdocs v1.2.0 release (css-v1.2.0.css); the wheel
+  # does not ship it. Re-pull the matching asset when bumping neoteroi-mkdocs.
+  - stylesheets/mkdocsoad.css

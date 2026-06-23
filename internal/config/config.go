@@ -14,6 +14,7 @@ import (
 
 const (
 	defaultAddr              = ":8080"
+	defaultMetricsAddr       = ":9090"
 	defaultReadTimeout       = 5 * time.Second
 	defaultReadHeaderTimeout = 5 * time.Second
 	defaultWriteTimeout      = 10 * time.Second
@@ -28,6 +29,9 @@ const (
 type Config struct {
 	// Addr is the host:port the HTTP server listens on.
 	Addr string
+	// MetricsAddr is the host:port of the dedicated listener that serves /metrics
+	// off the main API surface and its middleware. Empty co-locates /metrics on Addr.
+	MetricsAddr string
 	// ReadTimeout bounds the time spent reading an entire request.
 	ReadTimeout time.Duration
 	// ReadHeaderTimeout bounds the time spent reading request headers.
@@ -44,12 +48,24 @@ type Config struct {
 	LogLevel string
 	// LogFormat selects the slog handler (json or text).
 	LogFormat string
+	// CORSAllowedOrigins lists the origins permitted by the CORS middleware.
+	// Empty (the default) disables CORS entirely.
+	CORSAllowedOrigins []string
+	// TrustedProxyHeader names a proxy-set header (for example X-Real-IP) to
+	// read the client IP from. Empty (the default) trusts only the direct TCP
+	// peer, which cannot be spoofed.
+	TrustedProxyHeader string
 }
 
 // RegisterFlags declares the server configuration flags on flags. Binding them
 // to a Viper instance makes flags, environment variables, and defaults compose.
 func RegisterFlags(flags *pflag.FlagSet) {
 	flags.String("addr", defaultAddr, "host:port the HTTP server listens on")
+	flags.String(
+		"metrics-addr",
+		defaultMetricsAddr,
+		"host:port for the dedicated /metrics listener; empty serves /metrics on --addr",
+	)
 	flags.String("log-level", defaultLogLevel, "log level: debug, info, warn, or error")
 	flags.String("log-format", defaultLogFormat, "log format: json or text")
 	flags.Duration("read-timeout", defaultReadTimeout, "maximum duration for reading an entire request")
@@ -58,6 +74,12 @@ func RegisterFlags(flags *pflag.FlagSet) {
 	flags.Duration("idle-timeout", defaultIdleTimeout, "maximum time to wait for the next keep-alive request")
 	flags.Duration("request-timeout", defaultRequestTimeout, "per-request processing timeout")
 	flags.Duration("shutdown-grace", defaultShutdownGrace, "maximum duration to await graceful shutdown")
+	flags.StringSlice("cors-allowed-origins", nil, "allowed CORS origins (comma-separated); empty disables CORS")
+	flags.String(
+		"trusted-proxy-header",
+		"",
+		"proxy header to read the client IP from (for example X-Real-IP); empty trusts the TCP peer",
+	)
 }
 
 // Load reads the server configuration from vp, applying defaults for unset keys.
@@ -65,15 +87,18 @@ func Load(vp *viper.Viper) Config {
 	setDefaults(vp)
 
 	return Config{
-		Addr:              vp.GetString("addr"),
-		ReadTimeout:       vp.GetDuration("read-timeout"),
-		ReadHeaderTimeout: vp.GetDuration("read-header-timeout"),
-		WriteTimeout:      vp.GetDuration("write-timeout"),
-		IdleTimeout:       vp.GetDuration("idle-timeout"),
-		RequestTimeout:    vp.GetDuration("request-timeout"),
-		ShutdownGrace:     vp.GetDuration("shutdown-grace"),
-		LogLevel:          vp.GetString("log-level"),
-		LogFormat:         vp.GetString("log-format"),
+		Addr:               vp.GetString("addr"),
+		MetricsAddr:        vp.GetString("metrics-addr"),
+		ReadTimeout:        vp.GetDuration("read-timeout"),
+		ReadHeaderTimeout:  vp.GetDuration("read-header-timeout"),
+		WriteTimeout:       vp.GetDuration("write-timeout"),
+		IdleTimeout:        vp.GetDuration("idle-timeout"),
+		RequestTimeout:     vp.GetDuration("request-timeout"),
+		ShutdownGrace:      vp.GetDuration("shutdown-grace"),
+		LogLevel:           vp.GetString("log-level"),
+		LogFormat:          vp.GetString("log-format"),
+		CORSAllowedOrigins: vp.GetStringSlice("cors-allowed-origins"),
+		TrustedProxyHeader: vp.GetString("trusted-proxy-header"),
 	}
 }
 
@@ -81,6 +106,9 @@ func Load(vp *viper.Viper) Config {
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.Addr) == "" {
 		return errors.New("addr must not be empty")
+	}
+	if c.MetricsAddr != "" && c.MetricsAddr == c.Addr {
+		return errors.New("metrics-addr must differ from addr")
 	}
 	if c.RequestTimeout <= 0 {
 		return errors.New("request-timeout must be positive")
@@ -97,6 +125,7 @@ func (c Config) Validate() error {
 
 func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("addr", defaultAddr)
+	vp.SetDefault("metrics-addr", defaultMetricsAddr)
 	vp.SetDefault("read-timeout", defaultReadTimeout)
 	vp.SetDefault("read-header-timeout", defaultReadHeaderTimeout)
 	vp.SetDefault("write-timeout", defaultWriteTimeout)
@@ -105,4 +134,6 @@ func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("shutdown-grace", defaultShutdownGrace)
 	vp.SetDefault("log-level", defaultLogLevel)
 	vp.SetDefault("log-format", defaultLogFormat)
+	vp.SetDefault("cors-allowed-origins", []string{})
+	vp.SetDefault("trusted-proxy-header", "")
 }

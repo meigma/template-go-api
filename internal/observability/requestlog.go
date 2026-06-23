@@ -7,19 +7,15 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/meigma/template-go-api/internal/logctx"
 )
 
-// contextKey is a private type for context keys defined in this package.
-type contextKey int
-
-const loggerContextKey contextKey = iota
-
 // LoggerFrom returns the request-scoped logger stored in ctx by RequestLogger.
-// The boolean reports whether a logger was present.
+// The boolean reports whether a logger was present. It delegates to
+// [logctx.From], the dependency-free leaf that owns the context key.
 func LoggerFrom(ctx context.Context) (*slog.Logger, bool) {
-	logger, ok := ctx.Value(loggerContextKey).(*slog.Logger)
-
-	return logger, ok
+	return logctx.From(ctx)
 }
 
 // RequestLogger returns middleware that derives a request-scoped child logger
@@ -30,7 +26,7 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			logger := base.With(slog.String("request_id", middleware.GetReqID(r.Context())))
-			ctx := context.WithValue(r.Context(), loggerContextKey, logger)
+			ctx := logctx.WithLogger(r.Context(), logger)
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
@@ -38,6 +34,7 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 			logger.LogAttrs(ctx, slog.LevelInfo, "http request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
+				slog.String("client_ip", middleware.GetClientIP(r.Context())),
 				slog.Int("status", wrapped.Status()),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Duration("duration", time.Since(start)),

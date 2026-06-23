@@ -1,16 +1,41 @@
 ---
 title: template-go-api Docs
 slug: /
-description: Starting point for Meigma Go web API services.
+description: Meigma starter for Go web (HTTP) API services.
 ---
 
-# template-go-api Docs
+# template-go-api
 
-This repository is the starting point for Meigma Go web API services.
+`template-go-api` is the Meigma starter for building Go web (HTTP) API services.
+It ships a runnable, hexagonal API server (chi + Huma) with a `todo` example
+resource backed by an in-memory store, alongside the shared Meigma repository
+baseline (Moon tasks, pinned CI, Dependabot, and an enabled release layer).
 
-Generated projects should replace this page with project-specific documentation after bootstrapping:
+## Quick start
 
-- project summary
-- quick start
-- operating notes
-- support and security paths
+```sh
+moon run root:build
+./bin/template-go-api serve   # listens on :8080
+curl -sS -X POST localhost:8080/todos -H 'content-type: application/json' -d '{"title":"buy milk"}'
+```
+
+See the [README](https://github.com/meigma/template-go-api#readme) for the full
+quickstart, configuration reference, and guidance on replacing the example
+resource.
+
+## API reference
+
+The [API Reference](api.md) is generated from the OpenAPI specification. A
+running server also serves interactive docs at `/docs` and the live spec at
+`/openapi.yaml`.
+
+## Operating notes
+
+- Liveness: `GET /healthz`
+- Readiness: `GET /readyz` (reports named per-check results)
+- Metrics: `GET /metrics` on a dedicated listener (`--metrics-addr`, default `:9090`)
+
+## Support and security
+
+- Issues and contributions: see [CONTRIBUTING.md](https://github.com/meigma/template-go-api/blob/master/CONTRIBUTING.md).
+- Security reports: see [SECURITY.md](https://github.com/meigma/template-go-api/blob/master/SECURITY.md).

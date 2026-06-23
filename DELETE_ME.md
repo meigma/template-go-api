@@ -8,14 +8,14 @@ It is only here to orient the initial project owner.
 
 ## What This Template Provides
 
-- A minimal Go module at `github.com/meigma/template-go-api`.
-- A Cobra/Viper CLI skeleton under `cmd/template-go-api` and `internal/cli`.
+- A runnable hexagonal HTTP API server (chi + Huma) at `github.com/meigma/template-go-api`, with a `todo` example resource backed by an in-memory store, RFC 9457 errors, `/healthz`, `/readyz`, and `/metrics`, runtime API docs at `/docs`, and an `openapi` spec-export command.
+- A Cobra/Viper entrypoint under `cmd/template-go-api` and `internal/cli` exposing `serve` (default), `version`, and `openapi`.
 - Moon tasks for `format`, `lint`, `build`, `test`, and `check`.
 - `golangci-lint` wired through Proto and Moon.
 - CI that delegates to `moon ci --summary minimal` with pinned actions, dependency caches, and minimal token permissions.
 - A scheduled container vulnerability scan that uploads SARIF results to GitHub code scanning.
 - Dependabot coverage for GitHub Actions, Docker base images, Go modules, and the docs uv project.
-- MkDocs Material docs scaffolding under `docs/`, with GitHub Pages as the default publishing target.
+- MkDocs Material docs under `docs/` that render the exported OpenAPI spec as an API reference (neoteroi OAD), published to GitHub Pages, with a CI drift-guard that fails if the committed spec falls out of sync with the code.
 - Repository settings for signed commits, squash-only merges, immutable releases, private vulnerability reporting, and protected tags.
 - Release workflows for Release Please, GoReleaser binary assets, GHCR container images, checksums, SBOMs, and GitHub artifact attestations.
 - A root `ghd.toml` package manifest so released binaries can be installed with `ghd`.
@@ -40,7 +40,7 @@ The workflow caches Go modules, Go build artifacts, golangci-lint state, and uv'
 The `GitHub Pages` workflow builds the MkDocs site on pull requests and deploys the default-branch `docs/build` output to Pages. The repository settings manifest defaults Pages to workflow-based publishing with HTTPS enforcement.
 
 The release machinery is intentionally enabled in the template repository so the starter app proves Release Please, GoReleaser binary releases, native-runner container image builds, artifact validation, and attestations before generated projects inherit the setup.
-The nominal generated-project path is a CLI or service with both downloadable binaries and a container image. If the new project is binary-only, container-only, or a pure Go library, trim the release files as described below before the first release.
+The nominal generated-project path is an HTTP service with both a downloadable binary and a container image. If the new project is binary-only, container-only, or a pure Go library, trim the release files as described below before the first release.
 
 ## First Setup Checklist
 
@@ -75,14 +75,28 @@ The nominal generated-project path is a CLI or service with both downloadable bi
 
    Update Go imports, Moon metadata, README text, docs text, and CLI environment variable prefixes. For release-bearing projects, also update `.goreleaser.yaml`, `release-please-config.json`, `ghd.toml`, `Dockerfile`, and `.github/workflows/release*.yml` as applicable.
    Update `docs/mkdocs.yml` with the generated repository's GitHub Pages URL, usually `https://OWNER.github.io/REPO/`.
+   Remember the `TEMPLATE_GO_API_` environment-variable prefix is set in `internal/cli/root.go` (`SetEnvPrefix`); rename it to match the new module.
 
-5. Refresh module metadata:
+5. Replace the example resource.
+
+   The `todo` resource is a reference slice that demonstrates the hexagonal seams, not a product feature. To make it your own:
+
+   - Add a domain package under `internal/<resource>` (entity, `Repository` port, and `Service`), mirroring `internal/todo`.
+   - Implement the port: start from `internal/adapter/memory`, then swap it for a real datastore when you need persistence.
+   - Add a transport adapter under `internal/adapter/http/<resource>api` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/adapter/http/todoapi`.
+   - Add one `Register` call in `registerResources` in `internal/app/app.go`.
+   - When you wire a real datastore, add a readiness check to the `Readiness` slice in `internal/app/app.go` so `/readyz` reflects it.
+   - Run `moon run openapi` to refresh `docs/docs/openapi.yaml` after changing the API; the CI drift-guard fails if it is stale.
+
+   Keep the generic transport in `internal/adapter/http` (router, middleware, `/healthz`/`/readyz`/`/metrics`, RFC 9457 fallbacks, the `Registrar` seam), `internal/config`, and `internal/observability` as-is unless you have a reason to change them.
+
+6. Refresh module metadata:
 
    ```sh
    go mod tidy
    ```
 
-6. Configure releases for the chosen shape.
+7. Configure releases for the chosen shape.
 
    For the nominal binary plus container case:
 
@@ -117,19 +131,19 @@ The nominal generated-project path is a CLI or service with both downloadable bi
 
    In every release-bearing project, configure the release app credentials, protected-tag bypass, and repository package permissions before the first release. Run the release dry-run workflow after these edits and before merging the first release PR.
 
-7. Run the full local check:
+8. Run the full local check:
 
    ```sh
    moon run root:check
    ```
 
-8. Update project-facing docs:
+9. Update project-facing docs:
 
    - Rewrite `README.md` for the actual project.
    - Review `CONTRIBUTING.md` and `SECURITY.md`.
    - Add a real license before publishing the repository.
 
-9. Delete this file:
+10. Delete this file:
 
    ```sh
    rm DELETE_ME.md

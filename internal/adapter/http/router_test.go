@@ -1,18 +1,22 @@
 package http
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/meigma/template-go-api/internal/adapter/http/problem"
 	"github.com/meigma/template-go-api/internal/observability"
 )
 
@@ -25,12 +29,13 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 
 	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
 	handler := NewRouter(RouterDeps{
-		Logger:         discard,
-		Metrics:        observability.NewMetrics(),
-		Version:        "test",
-		RequestTimeout: testRequestTimeout,
-		Readiness:      nil,
-		Register:       nil,
+		Logger:               discard,
+		Metrics:              observability.NewMetrics(),
+		ServeMetricsEndpoint: true,
+		Version:              "test",
+		RequestTimeout:       testRequestTimeout,
+		Readiness:            nil,
+		Register:             nil,
 	})
 
 	srv := httptest.NewServer(handler)
@@ -49,23 +54,77 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 	assert.Contains(t, metrics.body, "go_goroutines")
 }
 
-// TestReadyzReflectsChecks verifies the ReadinessCheck seam: a failing check
-// yields 503, and a passing check yields 200.
+// TestMetricsEndpointOmittedWhenServedSeparately verifies /metrics is absent from
+// the main router when a dedicated metrics listener serves it.
+func TestMetricsEndpointOmittedWhenServedSeparately(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:               discard,
+		Metrics:              observability.NewMetrics(),
+		ServeMetricsEndpoint: false,
+		Version:              "test",
+		RequestTimeout:       testRequestTimeout,
+		Readiness:            nil,
+		Register:             nil,
+	})
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	assert.Equal(t, http.StatusNotFound, get(t, srv, "/metrics").status)
+	assert.Equal(t, http.StatusOK, get(t, srv, "/healthz").status)
+}
+
+// TestNewMetricsHandler verifies the dedicated metrics handler serves /metrics
+// and nothing else.
+func TestNewMetricsHandler(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(NewMetricsHandler(observability.NewMetrics()))
+	t.Cleanup(srv.Close)
+
+	metrics := get(t, srv, "/metrics")
+	require.Equal(t, http.StatusOK, metrics.status)
+	assert.Contains(t, metrics.body, "go_goroutines")
+
+	assert.Equal(t, http.StatusNotFound, get(t, srv, "/healthz").status)
+}
+
+// TestReadyzReflectsChecks verifies the named readiness seam: every check runs
+// (no short-circuit) and each result is reported by name, with the overall
+// status reflecting whether any check failed.
 func TestReadyzReflectsChecks(t *testing.T) {
 	t.Parallel()
 
 	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
 
+	ok := func(context.Context) error { return nil }
+	down := func(context.Context) error { return errors.New("down") }
+
 	tests := []struct {
-		name  string
-		check ReadinessCheck
-		want  int
+		name       string
+		checks     []ReadinessCheck
+		wantStatus int
+		wantBody   map[string]string
 	}{
-		{name: "ready", check: func(context.Context) error { return nil }, want: http.StatusOK},
 		{
-			name:  "unavailable",
-			check: func(context.Context) error { return errors.New("down") },
-			want:  http.StatusServiceUnavailable,
+			name:       "no checks is ready",
+			checks:     nil,
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]string{},
+		},
+		{
+			name:       "all pass",
+			checks:     []ReadinessCheck{{Name: "store", Check: ok}},
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]string{"store": "ok"},
+		},
+		{
+			name:       "any failure is unavailable",
+			checks:     []ReadinessCheck{{Name: "store", Check: ok}, {Name: "cache", Check: down}},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   map[string]string{"store": "ok", "cache": "unavailable"},
 		},
 	}
 
@@ -78,14 +137,19 @@ func TestReadyzReflectsChecks(t *testing.T) {
 				Metrics:        observability.NewMetrics(),
 				Version:        "test",
 				RequestTimeout: testRequestTimeout,
-				Readiness:      []ReadinessCheck{tt.check},
+				Readiness:      tt.checks,
 				Register:       nil,
 			})
 
 			srv := httptest.NewServer(handler)
 			t.Cleanup(srv.Close)
 
-			assert.Equal(t, tt.want, get(t, srv, "/readyz").status)
+			resp := get(t, srv, "/readyz")
+			assert.Equal(t, tt.wantStatus, resp.status)
+
+			var body readyzResponse
+			require.NoError(t, json.Unmarshal([]byte(resp.body), &body))
+			assert.Equal(t, tt.wantBody, body.Checks)
 		})
 	}
 }
@@ -110,46 +174,8 @@ func TestNotFoundReturnsProblemJSON(t *testing.T) {
 
 	resp := get(t, srv, "/does-not-exist")
 	assert.Equal(t, http.StatusNotFound, resp.status)
-	assert.Equal(t, problemContentType, resp.contentType)
+	assert.Equal(t, problem.ContentType, resp.contentType)
 	assert.Contains(t, resp.body, `"status":404`)
-}
-
-// TestRecovererReturnsProblemJSON verifies a panic becomes an RFC 9457 500.
-func TestRecovererReturnsProblemJSON(t *testing.T) {
-	t.Parallel()
-
-	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
-	inner := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("boom")
-	})
-	handler := Recoverer(discard)(inner)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
-	assert.Contains(t, rec.Body.String(), `"status":500`)
-}
-
-// TestTimeoutReturnsProblemJSON verifies an elapsed request deadline becomes an
-// RFC 9457 504 when the handler returns without writing.
-func TestTimeoutReturnsProblemJSON(t *testing.T) {
-	t.Parallel()
-
-	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	})
-	handler := timeout(time.Millisecond)(inner)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/slow", nil)
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusGatewayTimeout, rec.Code)
-	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
-	assert.Contains(t, rec.Body.String(), `"status":504`)
 }
 
 type testResponse struct {
@@ -176,4 +202,126 @@ func get(t *testing.T, srv *httptest.Server, path string) testResponse {
 		body:        string(data),
 		contentType: resp.Header.Get("Content-Type"),
 	}
+}
+
+// TestCORSPreflightAllowsConfiguredOrigin verifies a preflight against a
+// configured origin returns the allow-origin and Vary headers.
+func TestCORSPreflightAllowsConfiguredOrigin(t *testing.T) {
+	t.Parallel()
+
+	srv := corsTestServer(t, []string{"https://app.example"})
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodOptions, srv.URL+"/todos", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://app.example")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "https://app.example", resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, resp.Header.Get("Vary"), "Origin")
+}
+
+// TestCORSDisabledByDefault verifies that with no configured origins the server
+// emits no CORS headers at all (the safe template default).
+func TestCORSDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	srv := corsTestServer(t, nil)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/healthz", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://app.example")
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+}
+
+func corsTestServer(t *testing.T, origins []string) *httptest.Server {
+	t.Helper()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:             discard,
+		Metrics:            observability.NewMetrics(),
+		Version:            "test",
+		RequestTimeout:     testRequestTimeout,
+		CORSAllowedOrigins: origins,
+		Readiness:          nil,
+		Register:           nil,
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+// TestClientIPResolution verifies the trust model: by default a forged proxy
+// header is ignored and the access log records the TCP peer, but a configured
+// trusted header is honored. The handler is driven synchronously so the shared
+// log buffer is written and read on one goroutine.
+func TestClientIPResolution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		trustedHeader string
+		wantClientIP  string
+	}{
+		{name: "ignores forged header by default", trustedHeader: "", wantClientIP: "192.0.2.1"},
+		{name: "honors trusted header", trustedHeader: "X-Real-IP", wantClientIP: "203.0.113.7"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			logger := observability.NewLogger(&buf, slog.LevelInfo, "json")
+			handler := NewRouter(RouterDeps{
+				Logger:             logger,
+				Metrics:            observability.NewMetrics(),
+				Version:            "test",
+				RequestTimeout:     testRequestTimeout,
+				TrustedProxyHeader: tt.trustedHeader,
+				Readiness:          nil,
+				Register:           nil,
+			})
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil) // RemoteAddr 192.0.2.1:1234
+			req.Header.Set("X-Real-IP", "203.0.113.7")
+			handler.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, tt.wantClientIP, findAccessLog(t, buf.String())["client_ip"])
+		})
+	}
+}
+
+// findAccessLog returns the parsed "http request" access-log line from logs.
+func findAccessLog(t *testing.T, logs string) map[string]any {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
+		if line == "" {
+			continue
+		}
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["msg"] == "http request" {
+			return entry
+		}
+	}
+
+	t.Fatalf("no access-log line in:\n%s", logs)
+
+	return nil
 }
