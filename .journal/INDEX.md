@@ -8,3 +8,4 @@
 | 004 | 2026-06-22 | PostgreSQL persistence tier (research → build) | complete | Researched modern Go+PostgreSQL data access, then designed and shipped the sqlc+pgx+goose+testcontainers persistence tier behind the repository port via a gated multi-agent workflow — PR #6 merged (`18b56e7`). |
 | 005 | 2026-06-23 | Session 005 | in-progress | Session opened; awaiting the user's request. |
 | 006 | 2026-06-23 | Docker Compose day-one stack (API + PostgreSQL) | in-progress | Set up a Docker Compose stack so day-one runs of the template exercise the full API + PostgreSQL backend. |
+| 007 | 2026-06-23 | Explore restructuring internal/ to couple domain code | in-progress | Exploring feasibility of grouping each domain's code into one logical package hierarchy instead of splitting it across top-level packages. |
