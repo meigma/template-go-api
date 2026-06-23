@@ -133,3 +133,15 @@ Verified live: `:8087/metrics`→404, `:9097/metrics`→200, `:9097/healthz`→4
 "listening" logs, scrapes not self-counted, graceful shutdown of both servers
 ("shutting down http server" + "shutting down metrics server" + "servers stopped").
 `moon run root:check` + CI green on PR #5 (commit `6cd0bad`).
+
+## 2026-06-22 18:02 — PR #5 merged
+
+User approved ("LGTM"). Squash-merged PR #5 → `master 05f5446` (8 commits: the
+slice + the three review follow-ups — test consolidation, middleware refactor,
+metrics listener). Local master fast-forwarded; `feat/api-template-finish` worktree
+removed (wt detected tree matches master) and the local + remote branch deleted.
+
+State of the world: master is the finished hexagonal Go API-server template. Slice 2
+scope from TARGET_SHAPE.md is complete. Still deferred for future slices: authn/authz;
+Postgres adapter + testcontainers; OTel; rate limiting; pagination; API versioning;
+mockery. Session 003 work is done; session 002 remains formally `in-progress` in INDEX.
