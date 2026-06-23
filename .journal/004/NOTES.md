@@ -234,3 +234,19 @@ future slice: wire `test-integration` into CI (GitHub workflows are `.disabled`,
 need a Docker runner). Session work complete pending review/merge; ready for
 `session-close` when the user calls it.
 
+## 2026-06-23 — Comment-hygiene audit + cleanup (commit 30d3dd0)
+User asked to verify the branch's godoc/comments against the "state what the code
+IS, not the rationale/usage/decisions; no design-doc/phase/session refs" rule.
+Spawned a separate read-only auditor agent. Verdict: **broadly clean, 0
+high-severity** — no journal/phase/design-doc refs leaked into code (discipline
+held). 6 medium + 3 borderline (all polish). Applied the worthwhile trims across
+postgres.go (pkg doc), repository.go (Save), mapping.go (uuidParse), postgres
+migrate.go (Migrate), queries/todos.sql (UpsertTodo comment + narg example
+prose), app.go (New) — dropped cross-layer contract justifications, cross-adapter
+rationale, and the serve/migrate contrast; kept genuine constraints. Left the
+user-facing migrate CLI `Long` help (operational, not a code comment) and the
+closePool ordering-constraint comment. Regenerated sqlc (the UpsertTodo leading
+comment embeds into the generated doc → querier.go/todos.sql.go updated, else
+sqlc-check would drift). `moon run root:check` green. Pushed to PR #6 (now 9
+commits).
+
