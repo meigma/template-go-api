@@ -114,3 +114,17 @@ Inspector` pass (49s); release/container/Pages-deploy dry-runs skip as expected
 on a PR branch. PR ready for review/merge. Session work complete pending
 merge — end goal (remove the in-memory tier, default to PostgreSQL-only) is a
 separate follow-up, not in this PR.
+
+## 2026-06-23 15:35 — Close
+User approved ("LGTM"). **PR #7 squash-merged to `master` `8b68bd4`**; remote
+branch deleted. Local `master` fast-forwarded `18b56e7..8b68bd4`; session
+worktree `feat/compose-dev-stack` removed via `wt remove` (tree matched master).
+Other worktrees left untouched (`journal/jmgilman`; session 007's
+`refactor/domain-coupled-internal`). On close-out the only dirty journal path was
+`007/NOTES.md` (a concurrent session) — committed as `docs(journal): checkpoint
+session 007` before the sync rebase; 007's status untouched.
+
+Recorded: `SUMMARY.md` written; `INDEX.md` row 006 → complete; `TECH_NOTES.md`
+updated (compose stack + planned memory-tier removal). Handoff: feature is live
+on `master`; next up is the postgres-only refactor (drop `memory` adapter +
+`--store`). Session 006 closed.
