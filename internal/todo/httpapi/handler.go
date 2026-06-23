@@ -1,8 +1,8 @@
-// Package todoapi is the HTTP transport adapter for the todo resource: its
+// Package httpapi is the HTTP transport adapter for the todo resource: its
 // request/response DTOs, domain<->DTO mapping, error translation, and the Huma
 // operation registrations. It depends inward on the todo domain and plugs into
 // the generic transport (internal/adapter/http) through its Registrar seam.
-package todoapi
+package httpapi
 
 import (
 	"context"

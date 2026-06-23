@@ -1,4 +1,4 @@
-package todoapi
+package httpapi
 
 import (
 	"errors"

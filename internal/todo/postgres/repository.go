@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/meigma/template-go-api/internal/adapter/postgres/sqlc"
 	"github.com/meigma/template-go-api/internal/todo"
+	"github.com/meigma/template-go-api/internal/todo/postgres/sqlc"
 )
 
 // TodoRepository is a PostgreSQL todo.Repository backed by a pgx connection pool

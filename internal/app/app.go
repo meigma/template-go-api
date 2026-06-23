@@ -14,12 +14,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
-	"github.com/meigma/template-go-api/internal/adapter/http/todoapi"
-	"github.com/meigma/template-go-api/internal/adapter/memory"
 	"github.com/meigma/template-go-api/internal/adapter/postgres"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
+	"github.com/meigma/template-go-api/internal/todo/httpapi"
+	"github.com/meigma/template-go-api/internal/todo/memory"
+	todopostgres "github.com/meigma/template-go-api/internal/todo/postgres"
 )
 
 // App is a fully wired API server ready to Run.
@@ -109,7 +110,7 @@ func selectStore(
 		return nil, nil, nil, fmt.Errorf("connect postgres: %w", err)
 	}
 
-	repo := postgres.NewTodoRepository(pool)
+	repo := todopostgres.NewTodoRepository(pool)
 	readiness := []adapterhttp.ReadinessCheck{{Name: "postgres", Check: repo.Ping}}
 
 	return repo, pool, readiness, nil
@@ -138,6 +139,6 @@ func OpenAPIYAML(version string) ([]byte, error) {
 // call here.
 func registerResources(todoService *todo.Service) adapterhttp.Registrar {
 	return func(api huma.API) {
-		todoapi.Register(api, todoService)
+		httpapi.Register(api, todoService)
 	}
 }

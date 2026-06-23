@@ -15,6 +15,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/meigma/template-go-api/internal/adapter/postgres"
+	todopostgres "github.com/meigma/template-go-api/internal/todo/postgres"
 )
 
 // postgresImage pins the container image so the suite is reproducible across
@@ -75,7 +76,7 @@ func setupPostgres(ctx context.Context, t *testing.T) *fixture {
 // database (WITH FORCE), terminating any existing connections, so the pool must
 // be opened after the restore — hence a new repo per call rather than a shared
 // pool. The pool is closed via t.Cleanup.
-func (f *fixture) Reset(ctx context.Context, t *testing.T) *postgres.TodoRepository {
+func (f *fixture) Reset(ctx context.Context, t *testing.T) *todopostgres.TodoRepository {
 	t.Helper()
 
 	require.NoError(t, f.container.Restore(ctx))
@@ -84,5 +85,5 @@ func (f *fixture) Reset(ctx context.Context, t *testing.T) *postgres.TodoReposit
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	return postgres.NewTodoRepository(pool)
+	return todopostgres.NewTodoRepository(pool)
 }

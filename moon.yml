@@ -23,7 +23,7 @@ fileGroups:
   sqlcSources:
     - 'sqlc.yaml'
     - 'internal/adapter/postgres/migrations/*.sql'
-    - 'internal/adapter/postgres/queries/*.sql'
+    - 'internal/todo/postgres/queries/*.sql'
     - '.prototools'
     - '.moon/proto/sqlc.toml'
   lintConfig:
@@ -106,7 +106,7 @@ tasks:
     inputs:
       - '@group(sqlcSources)'
     outputs:
-      - 'internal/adapter/postgres/sqlc/*.go'
+      - 'internal/todo/postgres/sqlc/*.go'
     options:
       cache: false
 
@@ -121,13 +121,13 @@ tasks:
       tmp="$(mktemp -d "${PWD}/.sqlc-check.XXXXXX")"
       cfg="${tmp}.yaml"
       trap 'rm -rf "$tmp" "$cfg"' EXIT
-      sed "s|out: internal/adapter/postgres/sqlc|out: ${tmp#"${PWD}/"}|" sqlc.yaml > "$cfg"
+      sed "s|out: internal/todo/postgres/sqlc|out: ${tmp#"${PWD}/"}|" sqlc.yaml > "$cfg"
       proto run sqlc -- generate -f "$cfg"
-      git diff --no-index --exit-code -- internal/adapter/postgres/sqlc "$tmp"
+      git diff --no-index --exit-code -- internal/todo/postgres/sqlc "$tmp"
     toolchains: ['go']
     inputs:
       - '@group(sqlcSources)'
-      - 'internal/adapter/postgres/sqlc/*.go'
+      - 'internal/todo/postgres/sqlc/*.go'
     options:
       cache: false
 

@@ -1,4 +1,4 @@
-package todoapi
+package httpapi
 
 import "github.com/meigma/template-go-api/internal/todo"
 
