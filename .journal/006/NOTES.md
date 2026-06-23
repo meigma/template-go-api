@@ -66,3 +66,45 @@ User clarified the goal and answered the open forks. Recorded decisions:
 
 Next: build in an implementation worktree off `master`, functionally test
 (`docker compose up` → curl the API → confirm seeded todos), then PR.
+
+## 2026-06-23 15:26 — Built and functionally verified
+Worktree `feat/compose-dev-stack` (`.wt/feat-compose-dev-stack`) off `master`.
+
+Discovery: a **Dockerfile, `.dockerignore`, and `.go-version` already existed**
+(README "Container Image" section). My initial `ls Dockerfile* docker-compose*`
+returned nothing only because **zsh's `nomatch` aborts the whole compound
+command when any glob is empty** — the Dockerfile was there all along. Reused it
+as-is: multi-stage, `CGO_ENABLED=0` static build, distroless/static:nonroot,
+ENTRYPOINT `/usr/local/bin/template-go-api`, so `migrate up` and `serve` are just
+args. No Dockerfile change needed.
+
+Files added/changed (additive, non-Go):
+- `compose.yaml` — `postgres → migrate → seed → api` DAG. Build anchor
+  (`x-app-image`) so migrate+api share one locally-built image; prebaked conn
+  string anchor (`x-database-url`). postgres healthcheck = `pg_isready`;
+  `migrate` one-shot = `["migrate","up"]`; `seed` one-shot = `postgres:17-alpine`
+  running an sh loop applying `/sql/*.sql` (`ON_ERROR_STOP=1`, no-ops empty);
+  `api` = serve with `TEMPLATE_GO_API_STORE=postgres` + the conn string, ports
+  8080/9090. **No persisted volume** (ephemeral). Compose interpolation escaped
+  with `$$` in the seed script.
+- `hack/sql/0001_seed_todos.sql` — 3 example todos (ON CONFLICT DO NOTHING).
+- `hack/sql/README.md` — documents the drop-in seed convention.
+- `README.md` — new "## Local stack (Docker Compose)" section (step table +
+  ephemerality + hack/sql) and `compose.yaml`/`hack/sql/` in the layout tree.
+
+Functional verification (real `docker compose up --build`, Docker 29.4 / Compose
+v5.1.2): DAG ran in order — postgres healthy → migrate `Exited (0)` (goose v1
+applied) → seed `Exited (0)` ("applied 1 file(s)") → api `Up`. `GET /readyz` →
+`{"status":"ready","checks":{"postgres":"ok"}}`; `GET /todos` returned the 3
+seeds; `POST /todos` persisted a 4th (write path OK). **Ephemerality proven:**
+`down` + `up` reset to exactly the 3 seeds, dropping the POSTed row.
+
+Next: confirm `moon run root:check` is green, commit, push, open PR.
+
+## 2026-06-23 15:28 — PR opened
+`moon run root:check` green (9 tasks). Committed `03364a5`, pushed
+`feat/compose-dev-stack`, opened **PR #7**
+(https://github.com/meigma/template-go-api/pull/7). CI running (ci / GitHub
+Pages / Kusari pending; release + container dry-runs correctly skip on this
+branch). Watching checks to completion before handing back. Stack torn down
+locally (`docker compose down`); `template-go-api:dev` image left cached.
