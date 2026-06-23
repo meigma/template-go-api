@@ -8,27 +8,47 @@ import (
 	"net/http"
 )
 
-// Run starts the HTTP server and blocks until ctx is cancelled, then shuts the
-// server down within the configured grace period.
+// namedServer pairs an [http.Server] with a label used in log lines.
+type namedServer struct {
+	server *http.Server
+	name   string
+}
+
+// servers returns the servers to run: the API server and, when a metrics-addr is
+// configured, the dedicated metrics server.
+func (a *App) servers() []namedServer {
+	servers := []namedServer{{server: a.server, name: "http server"}}
+	if a.metricsServer != nil {
+		servers = append(servers, namedServer{server: a.metricsServer, name: "metrics server"})
+	}
+
+	return servers
+}
+
+// Run starts the configured HTTP servers and blocks until ctx is cancelled or a
+// server fails, then shuts every server down within the configured grace period.
 func (a *App) Run(ctx context.Context) error {
-	serveErr := make(chan error, 1)
-	go func() {
-		a.logger.InfoContext(ctx, "http server listening", slog.String("addr", a.server.Addr))
+	servers := a.servers()
+	serveErr := make(chan error, len(servers))
+	for _, s := range servers {
+		go func() {
+			a.logger.InfoContext(ctx, s.name+" listening", slog.String("addr", s.server.Addr))
 
-		err := a.server.ListenAndServe()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErr <- err
+			err := s.server.ListenAndServe()
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serveErr <- fmt.Errorf("%s: %w", s.name, err)
 
-			return
-		}
+				return
+			}
 
-		serveErr <- nil
-	}()
+			serveErr <- nil
+		}()
+	}
 
 	select {
 	case err := <-serveErr:
 		if err != nil {
-			return fmt.Errorf("http server: %w", err)
+			return err
 		}
 
 		return nil
@@ -38,16 +58,18 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) shutdown(ctx context.Context) error {
-	a.logger.InfoContext(ctx, "shutting down http server")
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.grace)
 	defer cancel()
 
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("graceful shutdown: %w", err)
+	var errs []error
+	for _, s := range a.servers() {
+		a.logger.InfoContext(ctx, "shutting down "+s.name)
+		if err := s.server.Shutdown(shutdownCtx); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.name, err))
+		}
 	}
 
-	a.logger.InfoContext(shutdownCtx, "http server stopped")
+	a.logger.InfoContext(shutdownCtx, "servers stopped")
 
-	return nil
+	return errors.Join(errs...)
 }

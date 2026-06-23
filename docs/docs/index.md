@@ -33,7 +33,7 @@ running server also serves interactive docs at `/docs` and the live spec at
 
 - Liveness: `GET /healthz`
 - Readiness: `GET /readyz` (reports named per-check results)
-- Metrics: `GET /metrics` (Prometheus exposition)
+- Metrics: `GET /metrics` on a dedicated listener (`--metrics-addr`, default `:9090`)
 
 ## Support and security
 

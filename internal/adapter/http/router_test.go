@@ -29,12 +29,13 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 
 	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
 	handler := NewRouter(RouterDeps{
-		Logger:         discard,
-		Metrics:        observability.NewMetrics(),
-		Version:        "test",
-		RequestTimeout: testRequestTimeout,
-		Readiness:      nil,
-		Register:       nil,
+		Logger:               discard,
+		Metrics:              observability.NewMetrics(),
+		ServeMetricsEndpoint: true,
+		Version:              "test",
+		RequestTimeout:       testRequestTimeout,
+		Readiness:            nil,
+		Register:             nil,
 	})
 
 	srv := httptest.NewServer(handler)
@@ -51,6 +52,43 @@ func TestInfraRoutesWithoutResources(t *testing.T) {
 	require.Equal(t, http.StatusOK, metrics.status)
 	assert.Contains(t, metrics.body, "http_requests_total")
 	assert.Contains(t, metrics.body, "go_goroutines")
+}
+
+// TestMetricsEndpointOmittedWhenServedSeparately verifies /metrics is absent from
+// the main router when a dedicated metrics listener serves it.
+func TestMetricsEndpointOmittedWhenServedSeparately(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:               discard,
+		Metrics:              observability.NewMetrics(),
+		ServeMetricsEndpoint: false,
+		Version:              "test",
+		RequestTimeout:       testRequestTimeout,
+		Readiness:            nil,
+		Register:             nil,
+	})
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	assert.Equal(t, http.StatusNotFound, get(t, srv, "/metrics").status)
+	assert.Equal(t, http.StatusOK, get(t, srv, "/healthz").status)
+}
+
+// TestNewMetricsHandler verifies the dedicated metrics handler serves /metrics
+// and nothing else.
+func TestNewMetricsHandler(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(NewMetricsHandler(observability.NewMetrics()))
+	t.Cleanup(srv.Close)
+
+	metrics := get(t, srv, "/metrics")
+	require.Equal(t, http.StatusOK, metrics.status)
+	assert.Contains(t, metrics.body, "go_goroutines")
+
+	assert.Equal(t, http.StatusNotFound, get(t, srv, "/healthz").status)
 }
 
 // TestReadyzReflectsChecks verifies the named readiness seam: every check runs

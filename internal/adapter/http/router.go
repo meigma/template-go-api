@@ -18,8 +18,13 @@ import (
 type RouterDeps struct {
 	// Logger is the base logger for the recover and access-log middleware.
 	Logger *slog.Logger
-	// Metrics provides the metrics middleware and the /metrics handler.
+	// Metrics provides the metrics middleware and, when ServeMetricsEndpoint is
+	// set, the /metrics handler.
 	Metrics *observability.Metrics
+	// ServeMetricsEndpoint mounts /metrics on this router. Leave it false when a
+	// dedicated metrics listener serves /metrics instead; the metrics middleware
+	// runs either way, so API requests are always recorded.
+	ServeMetricsEndpoint bool
 	// Version is reported in the OpenAPI document.
 	Version string
 	// RequestTimeout bounds per-request processing in the timeout middleware.
@@ -38,7 +43,7 @@ type RouterDeps struct {
 // NewRouter assembles the chi router: the core middleware stack, RFC 9457 error
 // fallbacks, the Huma API with its registered resource operations (which appear
 // in the OpenAPI spec), and the raw infrastructure routes (/healthz, /readyz,
-// /metrics) that bypass the spec.
+// and — when ServeMetricsEndpoint is set — /metrics) that bypass the spec.
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := chi.NewMux()
 
@@ -79,15 +84,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// Infrastructure routes stay raw chi and are excluded from the spec.
-	mountInfra(mux, deps.Metrics, deps.Readiness)
+	mountInfra(mux, deps.Metrics, deps.Readiness, deps.ServeMetricsEndpoint)
 
 	return mux
 }
 
-func mountInfra(mux chi.Router, metrics *observability.Metrics, readiness []ReadinessCheck) {
+func mountInfra(
+	mux chi.Router,
+	metrics *observability.Metrics,
+	readiness []ReadinessCheck,
+	serveMetrics bool,
+) {
 	mux.Get("/healthz", handleHealthz)
 	mux.Get("/readyz", handleReadyz(readiness))
-	mux.Handle("/metrics", metrics.Handler())
+	if serveMetrics {
+		mux.Handle("/metrics", metrics.Handler())
+	}
 }
 
 // allowedMethods returns a comma-separated Allow header value for path by probing

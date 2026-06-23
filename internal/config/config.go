@@ -14,6 +14,7 @@ import (
 
 const (
 	defaultAddr              = ":8080"
+	defaultMetricsAddr       = ":9090"
 	defaultReadTimeout       = 5 * time.Second
 	defaultReadHeaderTimeout = 5 * time.Second
 	defaultWriteTimeout      = 10 * time.Second
@@ -28,6 +29,9 @@ const (
 type Config struct {
 	// Addr is the host:port the HTTP server listens on.
 	Addr string
+	// MetricsAddr is the host:port of the dedicated listener that serves /metrics
+	// off the main API surface and its middleware. Empty co-locates /metrics on Addr.
+	MetricsAddr string
 	// ReadTimeout bounds the time spent reading an entire request.
 	ReadTimeout time.Duration
 	// ReadHeaderTimeout bounds the time spent reading request headers.
@@ -57,6 +61,11 @@ type Config struct {
 // to a Viper instance makes flags, environment variables, and defaults compose.
 func RegisterFlags(flags *pflag.FlagSet) {
 	flags.String("addr", defaultAddr, "host:port the HTTP server listens on")
+	flags.String(
+		"metrics-addr",
+		defaultMetricsAddr,
+		"host:port for the dedicated /metrics listener; empty serves /metrics on --addr",
+	)
 	flags.String("log-level", defaultLogLevel, "log level: debug, info, warn, or error")
 	flags.String("log-format", defaultLogFormat, "log format: json or text")
 	flags.Duration("read-timeout", defaultReadTimeout, "maximum duration for reading an entire request")
@@ -79,6 +88,7 @@ func Load(vp *viper.Viper) Config {
 
 	return Config{
 		Addr:               vp.GetString("addr"),
+		MetricsAddr:        vp.GetString("metrics-addr"),
 		ReadTimeout:        vp.GetDuration("read-timeout"),
 		ReadHeaderTimeout:  vp.GetDuration("read-header-timeout"),
 		WriteTimeout:       vp.GetDuration("write-timeout"),
@@ -97,6 +107,9 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Addr) == "" {
 		return errors.New("addr must not be empty")
 	}
+	if c.MetricsAddr != "" && c.MetricsAddr == c.Addr {
+		return errors.New("metrics-addr must differ from addr")
+	}
 	if c.RequestTimeout <= 0 {
 		return errors.New("request-timeout must be positive")
 	}
@@ -112,6 +125,7 @@ func (c Config) Validate() error {
 
 func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("addr", defaultAddr)
+	vp.SetDefault("metrics-addr", defaultMetricsAddr)
 	vp.SetDefault("read-timeout", defaultReadTimeout)
 	vp.SetDefault("read-header-timeout", defaultReadHeaderTimeout)
 	vp.SetDefault("write-timeout", defaultWriteTimeout)

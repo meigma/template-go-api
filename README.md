@@ -52,8 +52,12 @@ Operational endpoints:
 ```sh
 curl -sS localhost:8080/healthz   # liveness  => {"status":"ok"}
 curl -sS localhost:8080/readyz    # readiness => {"status":"ready","checks":{}}
-curl -sS localhost:8080/metrics   # Prometheus exposition
+curl -sS localhost:9090/metrics   # Prometheus exposition (separate listener)
 ```
+
+`/metrics` is served on a dedicated listener (`--metrics-addr`, default `:9090`)
+so it stays off the public API surface and outside the API middleware chain; set
+`--metrics-addr ""` to co-locate it on the API port instead.
 
 The running server also serves interactive API docs at `/docs` (Stoplight
 Elements) and the live spec at `/openapi.yaml` and `/openapi.json`.
@@ -79,7 +83,8 @@ default.
 
 | Flag | Env var | Default | Description |
 | --- | --- | --- | --- |
-| `--addr` | `TEMPLATE_GO_API_ADDR` | `:8080` | host:port to listen on |
+| `--addr` | `TEMPLATE_GO_API_ADDR` | `:8080` | host:port the API listens on |
+| `--metrics-addr` | `TEMPLATE_GO_API_METRICS_ADDR` | `:9090` | dedicated `/metrics` listener; empty serves `/metrics` on `--addr` |
 | `--log-level` | `TEMPLATE_GO_API_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `--log-format` | `TEMPLATE_GO_API_LOG_FORMAT` | `json` | `json` or `text` |
 | `--read-timeout` | `TEMPLATE_GO_API_READ_TIMEOUT` | `5s` | reading an entire request |

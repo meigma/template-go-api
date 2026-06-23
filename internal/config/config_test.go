@@ -16,6 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 
 	cfg := Load(viper.New())
 	assert.Equal(t, defaultAddr, cfg.Addr)
+	assert.Equal(t, defaultMetricsAddr, cfg.MetricsAddr)
 	assert.Equal(t, defaultLogLevel, cfg.LogLevel)
 	assert.Equal(t, defaultLogFormat, cfg.LogFormat)
 	assert.Equal(t, defaultRequestTimeout, cfg.RequestTimeout)
@@ -71,6 +72,10 @@ func TestValidate(t *testing.T) {
 	badFormat := base
 	badFormat.LogFormat = "xml"
 	require.Error(t, badFormat.Validate())
+
+	metricsSameAsAddr := base
+	metricsSameAsAddr.MetricsAddr = base.Addr
+	require.Error(t, metricsSameAsAddr.Validate())
 
 	negativeTimeout := base
 	negativeTimeout.RequestTimeout = -time.Second
