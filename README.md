@@ -72,6 +72,37 @@ so it stays off the public API surface and outside the API middleware chain; set
 The running server also serves interactive API docs at `/docs` (Stoplight
 Elements) and the live spec at `/openapi.yaml` and `/openapi.json`.
 
+## Local stack (Docker Compose)
+
+`docker compose up --build` brings up the **full** template against PostgreSQL —
+no local Go toolchain or database setup required:
+
+```sh
+docker compose up --build
+curl -sS localhost:8080/todos    # => the seeded todos
+curl -sS localhost:8080/readyz   # => {"status":"ready","checks":{"postgres":"ok"}}
+```
+
+Startup is an ordered DAG, because migrations are explicit (the server never runs
+them) and the seed data needs the schema to exist first:
+
+| Step | Service    | What it does                                                          |
+|------|------------|----------------------------------------------------------------------|
+| 1    | `postgres` | PostgreSQL 17 with a known config; the stack waits for `pg_isready`.  |
+| 2    | `migrate`  | One-shot `migrate up` — applies the embedded goose migrations.        |
+| 3    | `seed`     | One-shot — applies every `hack/sql/*.sql` (sorted) with `psql`.       |
+| 4    | `api`      | Serves with `--store=postgres` against the prebaked connection string. |
+
+The database is **ephemeral and reproducible**: no volume is persisted, so every
+`up` rebuilds a clean database, re-runs migrations, and re-applies the seeds;
+`docker compose down` discards it.
+
+Prepopulate local data by dropping SQL files in [`hack/sql/`](hack/sql/) — they
+run after the schema exists, so you can `INSERT` straight into tables like `todos`
+without touching migrations or adding setup code to the server. The bundled
+`hack/sql/0001_seed_todos.sql` seeds a few todos so the API returns data on the
+first request.
+
 ## Commands
 
 | Command | Description |
@@ -268,6 +299,8 @@ internal/
   observability/            slog logger, request logging, Prometheus metrics
   logctx/                   carries the request-scoped logger on the context
   app/                      composition root: wires everything and runs the server
+compose.yaml                day-one local stack: postgres + migrate + seed + api
+hack/sql/                   *.sql seeds applied to the Compose database (local dev)
 docs/                       MkDocs site; docs/docs/openapi.yaml is the exported spec
 sqlc.yaml                   sqlc generation config (repo root)
 ```
