@@ -84,7 +84,7 @@ Elements) and the live spec at `/openapi.yaml` and `/openapi.json`.
 ```sh
 ./bin/template-go-api openapi -o docs/docs/openapi.yaml
 ./bin/template-go-api version
-./bin/template-go-api migrate status --database-url postgres://localhost:5432/app
+./bin/template-go-api migrate status --database-url postgres://app:app@localhost:5432/app?sslmode=disable
 ```
 
 ## Configuration

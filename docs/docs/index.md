@@ -25,6 +25,9 @@ To run against PostgreSQL instead, apply the embedded migrations and switch the
 store:
 
 ```sh
+# start a throwaway PostgreSQL (or point at your own)
+docker run --rm -d -p 5432:5432 \
+  -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app postgres:17-alpine
 export TEMPLATE_GO_API_DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
 ./bin/template-go-api migrate up
 ./bin/template-go-api serve --store=postgres
