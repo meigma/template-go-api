@@ -19,7 +19,7 @@ const dialect = "postgres"
 // Migrate runs a goose migration command ("up", "down", or "status") against
 // databaseURL using the embedded migration files. It opens a short-lived
 // database/sql connection (goose's API) independent of the application's pgx
-// pool. Migrations are explicit and never run automatically by serve.
+// pool.
 func Migrate(ctx context.Context, databaseURL, command string, args ...string) error {
 	db, err := sql.Open(dbDriver, databaseURL)
 	if err != nil {

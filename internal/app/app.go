@@ -35,9 +35,8 @@ type App struct {
 
 // New wires the application from cfg and logger. version is reported in the
 // OpenAPI document served by the API. When the postgres store is selected it
-// connects a connection pool (which needs ctx and can fail), so New returns an
-// error; the caller owns running and shutting the App down (which closes the
-// pool).
+// connects a connection pool, which can fail. The caller owns running and
+// shutting the App down, which closes the pool.
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger, version string) (*App, error) {
 	repo, pool, readiness, err := selectStore(ctx, cfg)
 	if err != nil {

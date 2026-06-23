@@ -10,8 +10,7 @@ import (
 )
 
 // uuidParse parses a string id used to look up an existing row. A syntactically
-// invalid id can never match a stored uuid, so it maps to todo.ErrNotFound to
-// match the in-memory adapter's "unknown id is not found" behavior.
+// invalid id can never match a stored uuid, so it maps to todo.ErrNotFound.
 func uuidParse(id string) (uuid.UUID, error) {
 	uid, err := uuid.Parse(id)
 	if err != nil {

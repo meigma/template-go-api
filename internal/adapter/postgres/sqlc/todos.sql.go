@@ -77,7 +77,7 @@ type UpsertTodoParams struct {
 	CompletedAt *time.Time
 }
 
-// Insert-or-replace, honoring the todo.Repository.Save upsert contract.
+// Insert-or-replace by primary key.
 func (q *Queries) UpsertTodo(ctx context.Context, arg UpsertTodoParams) error {
 	_, err := q.db.Exec(ctx, upsertTodo,
 		arg.ID,

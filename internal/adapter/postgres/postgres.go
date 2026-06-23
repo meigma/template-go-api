@@ -1,6 +1,5 @@
 // Package postgres provides a PostgreSQL implementation of the todo outbound
-// port, backed by pgx/v5 and sqlc-generated queries. It is the production peer
-// of the in-memory adapter; the domain and transport layers are unaware of it.
+// port, backed by pgx/v5 and sqlc-generated queries.
 package postgres
 
 import (

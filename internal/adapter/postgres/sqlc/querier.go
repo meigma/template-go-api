@@ -13,7 +13,7 @@ import (
 type Querier interface {
 	GetTodo(ctx context.Context, id uuid.UUID) (Todo, error)
 	ListTodos(ctx context.Context) ([]Todo, error)
-	// Insert-or-replace, honoring the todo.Repository.Save upsert contract.
+	// Insert-or-replace by primary key.
 	UpsertTodo(ctx context.Context, arg UpsertTodoParams) error
 }
 

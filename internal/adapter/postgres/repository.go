@@ -27,8 +27,7 @@ func NewTodoRepository(pool *pgxpool.Pool) *TodoRepository {
 	}
 }
 
-// Save inserts or replaces the todo via an upsert, honoring the port's
-// insert-or-replace contract.
+// Save inserts or replaces the todo via an upsert.
 func (r *TodoRepository) Save(ctx context.Context, t todo.Todo) error {
 	params, err := toUpsertParams(t)
 	if err != nil {

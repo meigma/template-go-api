@@ -1,5 +1,5 @@
 -- name: UpsertTodo :exec
--- Insert-or-replace, honoring the todo.Repository.Save upsert contract.
+-- Insert-or-replace by primary key.
 INSERT INTO todos (id, title, status, created_at, completed_at)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE
@@ -14,10 +14,8 @@ SELECT id, title, status, created_at, completed_at FROM todos WHERE id = $1;
 -- name: ListTodos :many
 SELECT id, title, status, created_at, completed_at FROM todos ORDER BY created_at;
 
--- Example (commented): optional status filter via sqlc.narg, illustrating the
--- dynamic-query pattern without shipping a query-builder dependency. A NULL
--- argument disables the filter; a non-NULL value restricts to that status.
--- Uncomment and regenerate to use it.
+-- Optional status filter via sqlc.narg: a NULL argument disables the filter, a
+-- non-NULL value restricts to that status. Uncomment and regenerate to use.
 --
 -- -- name: ListTodosByStatus :many
 -- SELECT id, title, status, created_at, completed_at FROM todos
