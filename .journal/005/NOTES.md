@@ -98,3 +98,36 @@ whether to (a) close the Casbin/Cerbos/etc. gap with a follow-up research pass,
 and/or (b) move to collaborative design of the authz port + Huma middleware seam
 (keep design separate from mechanical build per
 `separate-mechanical-from-design-work`).
+
+## 2026-06-23 13:05 — Gap-fill research complete (the six uncovered engines)
+User chose "close the Casbin/Cerbos gap first." Ran 2nd `deep-research` run
+`wf_0cf09b78-afe` (5 angles · 23 sources · 106 claims → 24 confirmed / 1 refuted ·
+105 agents). Findings appended to `.journal/005/RESEARCH-authz-middleware.md`
+("UPDATE — Gap-fill pass").
+
+Verified (high confidence):
+- **Casbin** = true in-process embeddable Go lib (`casbin/casbin/v2`,
+  `Enforce → (bool,error)`), Apache-2.0 (no red flags, ASF incubating), PERM
+  metamodel config (ACL/RBAC/RBAC-domains/ABAC/RESTful), mature (v2.135.0 Dec
+  2025, ~1806 importers). = **strongest in-process peer to cedar-go**, above
+  OPA/OpenFGA on embeddability; credible alternative default but does NOT displace
+  cedar-go. Minor cost: ABAC leaks struct/reflection into matcher config.
+- **Cerbos** = NOT a supported in-process Go option. Embedded (WASM) ePDP is
+  JS/TS-only AND needs the commercial Cerbos Hub; the Go SDK is a client to an
+  external/sidecar PDP. → behind-a-port only; disqualified for the zero-infra
+  default. Does NOT change cedar-go-as-default.
+
+Directional only (budget-dropped again; primary sources fetched but not 3-vote
+verified): **SpiceDB**/**Permify** = Zanzibar gRPC servers → behind-a-port;
+**Topaz/Aserto** = OPA+directory sidecar → behind-a-port; **Oso OSS (`go-oso`)** =
+DEPRECATED for hosted Oso Cloud → disqualified.
+
+Consolidated ranking: Tier 1 in-process libs = cedar-go (default) · Casbin (peer)
+· embedded OPA; Tier 2 = OpenFGA (behind port); Tier 3 service-only = Cerbos/
+SpiceDB/Permify/Topaz; disqualified = Oso OSS. **Real default fork = cedar-go vs
+Casbin** (both verified, Apache-2.0, in-process; differ on authoring model).
+
+Next: gap is closed for the decision that matters. Teed up to user: optional 3rd
+pass to formally verify the four ReBAC/deprecated engines, vs move to
+collaborative design (cedar-go vs Casbin default + the authz port + Huma seam).
+Design stays separate from build per `separate-mechanical-from-design-work`.

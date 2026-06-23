@@ -189,3 +189,103 @@ verified claims to the authz layer via context:
 - Huma v2: https://huma.rocks/features/middleware/ · https://huma.rocks/how-to/oauth2-jwt/ · https://github.com/danielgtaylor/huma/discussions/389 · https://github.com/danielgtaylor/huma/issues/224
 - Authn verifiers: https://github.com/lestrrat-go/jwx · https://github.com/coreos/go-oidc · https://github.com/go-chi/jwtauth · https://auth0.com/blog/rebuilding-go-jwt-middleware-v3/
 - Patterns: https://pkg.go.dev/k8s.io/apiserver/pkg/authorization/authorizer · https://www.cerbos.dev/blog/how-to-implement-authorization-in-go · https://www.calhoun.io/pitfalls-of-context-values-and-how-to-avoid-or-mitigate-them/
+
+---
+
+# UPDATE — Gap-fill pass (2026-06-23): the six uncovered engines
+
+**Method:** second `deep-research` run `wf_0cf09b78-afe` — 5 angles · 23 sources ·
+106 claims → top 25 verified → 24 confirmed / 1 refuted · 105 agents. Scoped to the
+six engines the first pass missed, ranked relative to cedar-go / OPA / OpenFGA.
+
+## Casbin — VERIFIED (high confidence)
+- **True in-process embeddable Go library** — `github.com/casbin/casbin/v2`
+  (canonical; v3 is the newer active major under `apache/casbin`). `NewEnforcer(...)`
+  + synchronous `Enforce(rvals ...interface{}) (bool, error)`. No server. (An optional
+  separate `casbin-server` exists but is distinct.)
+- **License: Apache-2.0**, no copyleft / source-available / open-core / paywall — NO
+  template red flags. Now an ASF **incubating** (podling) project (SGA/IP transfer in
+  progress; doesn't affect the code license).
+- **Authoring model:** the PERM metamodel in a `model.conf`
+  (`[request_definition]`/`[policy_definition]`/`[policy_effect]`/`[matchers]`,
+  + `[role_definition]` for RBAC) separated from policy data (CSV file or DB adapter).
+  Supports ACL, RBAC, RBAC-with-domains/tenants, ABAC, RESTful (keyMatch). "Change how
+  authz works by editing a config file."
+- **Maturity:** v2.135.0 (Dec 9 2025), ~1,806 importers, ~20.2k stars; active v3.x line
+  (v3.10.0 Jan 2026). Go is the flagship implementation.
+- **Verdict:** the **strongest in-process peer to cedar-go** — above embedded OPA and
+  OpenFGA on the embeddability axis. A credible *alternative default*, but does NOT
+  displace cedar-go. Choose Casbin over cedar-go only when a **config-file-driven
+  PERM/RBAC(-with-domains)/ABAC** model + CSV/DB policy adapters is explicitly
+  preferred over Cedar's purpose-built policy language + allow/deny+reasons output.
+  Minor cost: variadic `Enforce` and reflection/struct-based ABAC leak the
+  principal/resource model into matcher expressions — a small ergonomic tax behind a
+  minimal-principal Decision port.
+
+## Cerbos — VERIFIED (high confidence): NOT an in-process Go option
+- **No supported in-process Go mode.** Cerbos Embedded (ePDP, WASM) is
+  **JavaScript/TypeScript-only** (`@cerbos/embedded-client`/`-server`); official docs
+  explicitly route Go to **service PDPs**. (A Go integrator could DIY-load the WASM
+  bundle via wazero, but that is unsupported.)
+- **Cerbos Embedded additionally requires the commercial Cerbos Hub** to compile/serve
+  policy bundles (CDN-delivered, polled). No standalone OSS local-compilation path.
+- The official `github.com/cerbos/cerbos-sdk-go` is a **client** to an external/sidecar
+  PDP over gRPC/REST (TCP/Unix socket) — not a local evaluator. Repo is Apache-2.0, active.
+- Policies authored as YAML (resource policies + derived roles).
+- **Verdict:** for Go, Cerbos is **service-only → behind-a-port only** (same bucket as
+  OpenFGA-as-a-service). Does **NOT** change cedar-go-as-default; disqualified for the
+  zero-infra default by JS-only embedding + the Hub paywall.
+
+## SpiceDB · Permify · Topaz/Aserto · Oso — DIRECTIONAL ONLY (not 3-vote verified this pass)
+The verification budget again dropped these four (`budgetDropped: 7`); primary sources
+were fetched but no claims survived to the verified top-25. Directional read from those
+fetched primary sources (treat as unverified, lower confidence):
+- **SpiceDB** (`authzed/spicedb`) — Zanzibar/ReBAC gRPC **server**; embed via Go client,
+  not a first-party in-process lib (a community `borkfork/spicedb-embedded` exists).
+  → behind-a-port, same class as OpenFGA.
+- **Permify** (`Permify/permify`) — Zanzibar/ReBAC **server**. → behind-a-port.
+- **Topaz/Aserto** (`aserto-dev/topaz`) — OPA + a Zanzibar-style directory, deployed as a
+  container/**sidecar**; Aserto is the commercial hosted product. → behind-a-port.
+- **Oso** — the OSS `go-oso` library (Polar language) is **DEPRECATED** in favor of the
+  hosted **Oso Cloud** (deprecation notice on osohq.com). → effectively a dead end for a
+  copyable template; Oso Cloud is hosted/paywalled.
+- One Cerbos sub-claim (WASM bundle excludes policies) was refuted (1-2); not relied upon.
+
+## Consolidated final ranking (in-process embeddability = the template's priority)
+
+**Tier 1 — true in-process embeddable Go policy libraries (zero infra; viable defaults):**
+1. **cedar-go** — *recommended default.* Apache-2.0; Cedar policy language (PARC);
+   `Authorize → Decision + Diagnostic` (allow/deny + reasons).
+2. **Casbin** — *strongest peer / alternative default.* Apache-2.0; PERM metamodel
+   config + CSV/DB adapters; `Enforce → (bool, error)`. Pick when config-driven
+   RBAC/ABAC is preferred over a policy language.
+3. **embedded OPA** — Rego policy-as-code; in-process but Go-only, engine upgrade =
+   redeploy (`opa/v1/rego`).
+
+**Tier 2 — embeddable but heavy → behind a port:**
+4. **OpenFGA** — ReBAC; embeddable Go lib but runs the full Zanzibar engine in-process.
+
+**Tier 3 — service/sidecar-only for Go → behind a port only:**
+- **Cerbos** (Go SDK = client to external PDP; embedded mode JS-only + commercial Hub),
+  **SpiceDB**, **Permify**, **Topaz/Aserto** *(last three directional)*.
+
+**Disqualified for a copyable template:**
+- **Oso OSS** (`go-oso`) — deprecated in favor of hosted Oso Cloud *(directional)*.
+
+### Bottom line
+The real fork for the template default is **cedar-go vs Casbin** — both fully verified,
+both Apache-2.0, both pure in-process. Difference is the authoring model: Cedar's
+purpose-built policy language (allow/deny + reasons, naturally principal-agnostic) vs
+Casbin's PERM config metamodel (flexible models, but ABAC leaks struct/reflection into
+matchers). Everything else is behind-a-port (ReBAC services) or disqualified (Oso OSS).
+
+### Still-open (only if formal verification of the four ReBAC/deprecated engines is wanted)
+SpiceDB / Permify / Topaz / Oso exact license + embeddability remain *directional, not
+3-vote verified*. Also open: Casbin v2-vs-v3 import recommendation; cedar-go entity
+sourcing in the hexagonal layout (resource/principal graph per-request without coupling
+the authz port to a persistence adapter); per-request eval latency cedar-go vs OPA.
+
+### Gap-fill pass sources
+- Casbin: https://github.com/apache/casbin · https://pkg.go.dev/github.com/casbin/casbin/v2 · https://casbin.org/docs/how-it-works/ · https://casbin.org/docs/abac/ · https://casbin.apache.org/ · https://incubator.apache.org/projects/casbin.html
+- Cerbos: https://docs.cerbos.dev/cerbos-hub/decision-points-embedded · https://www.cerbos.dev/features-benefits-and-use-cases/wasm-embedded-pdp · https://github.com/cerbos/cerbos-sdk-go
+- Directional: https://github.com/authzed/spicedb · https://github.com/Permify/permify · https://github.com/aserto-dev/topaz · https://www.osohq.com/docs/oss/any/getting-started/deprecation.html · https://github.com/osohq/go-oso
