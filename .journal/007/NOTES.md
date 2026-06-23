@@ -107,3 +107,18 @@ generated-file exclusion works fine) — matches the worktree-tooling-flakiness 
 merged. No go.mod/go.sum changes (pure move). CI: only Kusari runs (ci/Pages are
 `.disabled`); **Kusari passed (21s)** — PR fully green, ready to squash-merge.
 Awaiting user go-ahead to merge.
+
+## 2026-06-23 15:56 — Close
+User approved (LGTM) and asked to merge + close. Merge hit a conflict because the
+branch was cut from `18b56e7` while session 006's PR #7 (`8b68bd4`) landed mid-
+session; rebased onto `origin/master`, resolved one README directory-layout
+conflict (kept both 006's `compose.yaml`/`hack/sql/` lines and my `integration/`
+line), re-ran `root:check` green, force-pushed. **PR #8 squash-merged to `master`
+`1f1e5a7`.** `gh pr merge --delete-branch` errored on local cleanup (master is
+checked out in the main worktree) but the server-side merge succeeded; deleted the
+remote branch manually and `wt remove`d the impl worktree. Local `master`
+fast-forwarded to `1f1e5a7`.
+
+Recorded: `SUMMARY.md` written; `INDEX.md` row 007 → complete; `TECH_NOTES.md`
+updated (new per-domain `internal/` layout bullet + corrected stale sqlc/adapter
+paths). Hand-off: refactor done and merged; no follow-up owed. Session closed.
