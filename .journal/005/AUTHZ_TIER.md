@@ -226,9 +226,14 @@ type Principal struct {
 - The principal's group memberships (for `principal in Group::"…"`) are built into the
   principal entity's `Parents` from claims day-one (no load); a base-package resolver
   can resolve them lazily from an IdP/DB later.
-- **Dev authenticator** (template default — see §8C): derives the principal from
-  explicit `X-Dev-*` headers (subject, roles), logs a prominent startup warning, and is
-  called out as the #1 thing to replace in DELETE_ME/README.
+- **API-key authenticator** (template default — see §8C): the shipped `Authenticator`.
+  Reads a bearer / `X-API-Key` credential, looks it up in a configured key→principal map
+  (subject + roles), and produces the `Principal`. A *real* (if minimal) mechanism — not
+  pure header impersonation — so it both demos the full flow and is a plausible starting
+  point a consumer could harden; still trivial to remove (one `Authenticator` impl + one
+  config field). Two implementation rules: (1) **never log the key** — the access-log
+  middleware must redact `Authorization` / `X-API-Key`; (2) day-one is a plain map
+  lookup, with hashing + constant-time compare noted as the hardening path in DELETE_ME.
 - **Reference production authn** (documented, not wired): JWT via `lestrrat-go/jwx`,
   OIDC via `coreos/go-oidc` — each implements `Authenticator` and hands verified claims
   into `Principal`.
@@ -250,20 +255,24 @@ Safest posture and instructive. (Infra routes — `/healthz` `/readyz` `/metrics
 `/openapi` — are raw chi routes outside the Huma authz middleware, so they're
 unaffected.)
 
-**C. Day-one authn default — THE choice that needs your call (security stakes).**
-Recommendation: **ship the dev authenticator enabled by default**, so `go run` + curl
-demonstrates authz end-to-end (send `X-Dev-*` headers to be a user and exercise
-allow-paths; omit them to see 401/403 enforcement). Guard rails: loud startup warning,
-prominent DELETE_ME/README "replace me" guidance, and `--auth-dev-mode=false` to
-disable.
-- *Trade-off:* copy-to-prod footgun — a deployed copy that forgets to replace dev auth
-  would trust `X-Dev-Subject` from anyone (auth bypass).
-- *Safer alternative:* dev authenticator **off by default** → out-of-the-box protected
-  endpoints return 401 (still demonstrates enforcement), and you enable dev-mode to see
-  allow-paths. No implicit trust if copied to prod.
-- A middle option: dev-mode auto-enables only outside a "production" config and refuses
-  otherwise.
-**→ Need your pick: dev-on-by-default (best demo) vs dev-off-by-default (safest).**
+**C. Day-one authn — RESOLVED via a rudimentary API-key layer (supersedes the earlier
+dev-header proposal).** The shipped `Authenticator` is an API-key layer (§7): a
+configured key→principal(+roles) map. A *real* credential rather than header
+impersonation, so the copy-to-prod risk is smaller (you need the key, not just any
+header) and it doubles as a plausible starting point. It exercises the full flow:
+no key → 401; valid user key → allowed on its routes; key lacking a role → 403; admin
+key → everything (via `base.cedar`).
+- **Sub-decision (smaller stakes now): do built-in dev keys ship?**
+  - *Recommended:* ship a small built-in dev key set (one user, one admin) so `go run` +
+    the documented curl works zero-config, WITH a loud startup warning whenever built-in
+    keys are active, a config override (`--api-keys`) for real keys, and DELETE_ME as the
+    #1 removal item. (Honors "mostly hardcoded + trivial".) Residual footgun: a copy
+    deployed with the default keys unchanged — mitigated by the warning + docs, and
+    smaller than header impersonation.
+  - *Safer variant:* no default keys → out-of-the-box every protected route 401s (still
+    demonstrates enforcement); you set a key in config to exercise allow-paths. No shipped
+    secret if copied to prod.
+**→ Need your pick: ship built-in dev keys (zero-config demo) vs no default keys (safest).**
 
 **D. Double-load default.** Day-one shipped policies are coarse (principal + URL
 identity) → no resource load → no double-load. Ship the request-scoped getter cache;
@@ -279,17 +288,17 @@ for the default.
   middleware entirely (escape hatch / incremental adoption).
 - `--authz-policy-dir` (optional) — load `.cedar` files from a directory instead of the
   embedded set (loaded at startup; embedded is the default).
-- `--auth-dev-mode` (default per §8C) — enable the dev authenticator.
-- (optional) `--auth-dev-subject` / `--auth-dev-roles` — convenience defaults for
-  dev-mode when headers are absent.
+- `--api-keys` — the key→principal(+roles) map for the API-key authenticator (env
+  `TEMPLATE_GO_API_API_KEYS`). Empty disables all keys (the "safe variant" of §8C);
+  whether a built-in dev default applies is the §8C sub-decision.
 
 ---
 
 ## 10. What ships day-one vs. extension points
 
 **Ships (the demonstration):**
-- Base `authz` package; one global middleware; deny-by-default; dev authenticator;
-  RFC 9457 rejections.
+- Base `authz` package; one global middleware; deny-by-default; the API-key
+  authenticator (per §8C); RFC 9457 rejections.
 - A `todoauthz` slice with embedded `policy.cedar`, action constants, and a fact
   resolver; the todo routes tagged with their actions.
 - A coarse reference policy (e.g. authenticated users may CRUD todos; an `admin` role
@@ -321,7 +330,8 @@ Branch `feat/authz-tier` in its own worktree; integrate via squash-merged PR; hu
 gate after each phase (per `separate-mechanical-from-design-work`).
 
 - **Phase A — base `authz` package:** `go get cedar-go`; Authorizer + PolicySet merge;
-  Principal + context; Authenticator seam + dev authenticator; global middleware
+  Principal + context; Authenticator seam + API-key authenticator (redacted from logs);
+  global middleware
   (deny-default, 401/403/500, problem+json); `Require`/`Public` declarations + Security
   population; request-scoped lazy getter (cache + error capture); config flags;
   `base.cedar`. Composition-root wiring with an empty contribution set.
@@ -338,7 +348,8 @@ gate after each phase (per `separate-mechanical-from-design-work`).
 
 ## 13. Open questions to resolve at/after review
 
-1. **§8C dev-auth default** — the one decision with security stakes; needs your pick.
+1. **§8C built-in dev keys** — ship a default dev key set (zero-config demo) vs none
+   (safest); the one decision still needing your pick.
 2. Confirm Huma exposes the path param to middleware (`ctx.Param("todoID")` or via the
    chi route context) — feasibility certain (route is matched pre-middleware), exact
    accessor to verify in Phase A.

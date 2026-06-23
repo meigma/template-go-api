@@ -215,3 +215,21 @@ is also `package authz`, so the composition root + `todoapi` alias the slice imp
 (`todoauthz "…/internal/todo/authz"`) — dir stays clean, `todoauthz.X` in examples is
 just that alias. Cedar-free-domain rule still holds (dep runs slice→core only). Still
 paused for review; §8C (dev-auth default) remains the open user decision.
+
+## 2026-06-23 14:59 — Day-one authn: API-key layer (supersedes dev-header)
+User proposed a rudimentary, mostly-hardcoded **API-key** layer as the day-one
+authn/authz solution, caveated as not-real + trivial to remove. Endorsed — it's better
+than the `X-Dev-*` header dev-authenticator: a real credential (not pure impersonation,
+so smaller copy-to-prod risk), doubles as a plausible hardenable starting point, still
+trivial to remove, and demonstrates allow/deny end-to-end (no key→401, user key→allowed,
+missing role→403, admin key→everything). Drops into the existing `Authenticator` seam —
+nothing else in the design changes. Two impl rules baked in: never log the key (redact
+`Authorization`/`X-API-Key` in the access log); day-one = plain map lookup, hashing +
+constant-time compare as the DELETE_ME hardening path.
+
+Folded into AUTHZ_TIER.md (§7 authenticator, §8C resolution, §9 `--api-keys` config,
+§10/§12 build, §13). §8C reframed: the remaining (smaller-stakes) open decision is
+whether **built-in dev keys ship** — recommended: ship a tiny user+admin default set for
+zero-config demo WITH a loud warning + `--api-keys` override + DELETE_ME #1 removal
+(honors "mostly hardcoded"); safer variant = no default keys (protected routes 401 out
+of box). Still paused for user's pick on that sub-decision before the build.
