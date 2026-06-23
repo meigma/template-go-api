@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/meigma/template-go-api/internal/adapter/postgres/sqlc"
 	"github.com/meigma/template-go-api/internal/todo"
+	"github.com/meigma/template-go-api/internal/todo/postgres/sqlc"
 )
 
 // uuidParse parses a string id used to look up an existing row. A syntactically

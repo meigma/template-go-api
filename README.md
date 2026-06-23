@@ -154,10 +154,12 @@ missing URL is rejected at startup.
 
 The `todo.Repository` port has two adapters. `--store=memory` (the default) keeps
 everything in a mutex-guarded map and needs no infrastructure. `--store=postgres`
-swaps in the PostgreSQL adapter under `internal/adapter/postgres`: a
-[pgx](https://github.com/jackc/pgx) connection pool, [sqlc](https://sqlc.dev)
-type-safe queries, and [goose](https://github.com/pressly/goose) migrations. The
-domain and transport layers are identical for both — only the composition root in
+swaps in the PostgreSQL adapter under `internal/todo/postgres`:
+[sqlc](https://sqlc.dev) type-safe queries over a
+[pgx](https://github.com/jackc/pgx) connection pool, with
+[goose](https://github.com/pressly/goose) migrations. The shared connection pool
+and migration machinery stay under `internal/adapter/postgres` as database-level
+concerns. The domain and transport layers are identical for both — only the composition root in
 `internal/app/app.go` differs, and it also registers a `postgres` readiness check
 so `/readyz` reflects database connectivity.
 
@@ -214,14 +216,14 @@ regenerating the typed query layer (below).
 
 ### Type-safe queries (sqlc)
 
-Hand-written queries live in `internal/adapter/postgres/queries/todos.sql`; sqlc
-generates the typed Go in `internal/adapter/postgres/sqlc/` from those queries and
+Hand-written queries live in `internal/todo/postgres/queries/todos.sql`; sqlc
+generates the typed Go in `internal/todo/postgres/sqlc/` from those queries and
 the migration schema. The generated package is **committed and drift-guarded**
 (mirroring the `openapi` / `openapi-check` pattern). After changing a migration or
 a query, regenerate and commit:
 
 ```sh
-moon run root:sqlc       # regenerate internal/adapter/postgres/sqlc/
+moon run root:sqlc       # regenerate internal/todo/postgres/sqlc/
 ```
 
 `moon run root:sqlc-check` (part of `root:check`) regenerates into a throwaway
@@ -287,18 +289,20 @@ internal/
   cli/                      serve / version / openapi / migrate commands, Viper wiring
   config/                   server runtime config (flags + TEMPLATE_GO_API_* env)
   todo/                     domain: entity, Repository port, Service (the example)
-  adapter/
+    httpapi/                inbound transport: the todo resource's DTOs, mapping, handlers
     memory/                 outbound adapter: in-memory Repository implementation
     postgres/               outbound adapter: PostgreSQL Repository (pgx + sqlc)
-      migrations/           embedded goose migrations (also sqlc's schema source)
       queries/              hand-written sqlc queries
       sqlc/                 generated, committed, drift-guarded query layer
-    http/                   inbound transport: chi router, middleware, RFC 9457
-                            errors, /healthz /readyz /metrics, OpenAPI export
-      todoapi/              the todo resource's transport (DTOs, mapping, handlers)
+  adapter/                  shared, cross-domain infrastructure (not domain-specific)
+    http/                   generic transport: chi router, middleware, RFC 9457 errors,
+                            /healthz /readyz /metrics, OpenAPI export, Registrar seam
+    postgres/               connection pool (Connect) + goose migrate library
+      migrations/           embedded goose migrations (also sqlc's schema source)
   observability/            slog logger, request logging, Prometheus metrics
   logctx/                   carries the request-scoped logger on the context
   app/                      composition root: wires everything and runs the server
+  integration/              container-backed integration tests (build tag: integration)
 compose.yaml                day-one local stack: postgres + migrate + seed + api
 hack/sql/                   *.sql seeds applied to the Compose database (local dev)
 docs/                       MkDocs site; docs/docs/openapi.yaml is the exported spec
@@ -309,15 +313,23 @@ sqlc.yaml                   sqlc generation config (repo root)
 
 Replace or extend the `todo` example by following the same seams:
 
-1. Add a domain package under `internal/<resource>` (entity + `Repository` port + `Service`), mirroring `internal/todo`.
-2. Implement the port — start from `internal/adapter/memory` for zero-infra, or mirror `internal/adapter/postgres` for a real datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
-3. Add a transport adapter under `internal/adapter/http/<resource>api` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `todoapi`.
+Each resource owns its code under `internal/<resource>/`: the domain core at the
+package root, with its adapters nested beneath it.
+
+1. Add a domain package `internal/<resource>` (entity + `Repository` port + `Service`), mirroring `internal/todo`.
+2. Implement the port in a nested adapter — start from `internal/<resource>/memory` for zero-infra, or mirror `internal/todo/postgres` for a real datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
+3. Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
 4. Add one `Register` call in `registerResources` in `internal/app/app.go`.
 
-The generic transport in `internal/adapter/http` needs no changes. After changing
-the API, run `moon run openapi` to refresh the committed spec (CI fails if it
-drifts). If you back the resource with PostgreSQL, also add its readiness check to
-the `Readiness` slice in `internal/app/app.go` so `/readyz` reflects it.
+Shared, cross-domain infrastructure needs no changes: the generic transport in
+`internal/adapter/http` and the connection pool / migrations in
+`internal/adapter/postgres`. Because each resource's `postgres` package shares its
+name with that shared infra (and, across resources, with each other), import the
+per-resource adapters with aliases in `app.go` — as the `todopostgres` import
+already shows. After changing the API, run `moon run openapi` to refresh the
+committed spec (CI fails if it drifts). If you back the resource with PostgreSQL,
+also add its readiness check to the `Readiness` slice in `internal/app/app.go` so
+`/readyz` reflects it.
 
 ## Documentation
 

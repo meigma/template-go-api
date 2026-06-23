@@ -1,4 +1,4 @@
-package todoapi_test
+package httpapi_test
 
 import (
 	"bytes"
@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
-	"github.com/meigma/template-go-api/internal/adapter/http/todoapi"
-	"github.com/meigma/template-go-api/internal/adapter/memory"
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
+	"github.com/meigma/template-go-api/internal/todo/httpapi"
+	"github.com/meigma/template-go-api/internal/todo/memory"
 )
 
 const testRequestTimeout = 5 * time.Second
@@ -44,7 +44,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		Version:        "test",
 		RequestTimeout: testRequestTimeout,
 		Readiness:      nil,
-		Register:       func(api huma.API) { todoapi.Register(api, service) },
+		Register:       func(api huma.API) { httpapi.Register(api, service) },
 	})
 
 	srv := httptest.NewServer(handler)
@@ -89,7 +89,7 @@ func TestTodoAPIFunctional(t *testing.T) {
 	resp := doRequest(t, srv, http.MethodPost, "/todos", `{"title":"buy milk"}`)
 	require.Equal(t, http.StatusCreated, resp.status)
 
-	var created todoapi.TodoDTO
+	var created httpapi.TodoDTO
 	require.NoError(t, json.Unmarshal([]byte(resp.body), &created))
 	assert.NotEmpty(t, created.ID)
 	assert.Equal(t, "buy milk", created.Title)
@@ -110,7 +110,7 @@ func TestTodoAPIFunctional(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.status)
 
 	var listed struct {
-		Todos []todoapi.TodoDTO `json:"todos"`
+		Todos []httpapi.TodoDTO `json:"todos"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(resp.body), &listed))
 	assert.Len(t, listed.Todos, 1)
@@ -118,7 +118,7 @@ func TestTodoAPIFunctional(t *testing.T) {
 	resp = doRequest(t, srv, http.MethodPost, "/todos/"+created.ID+"/complete", "")
 	require.Equal(t, http.StatusOK, resp.status)
 
-	var completed todoapi.TodoDTO
+	var completed httpapi.TodoDTO
 	require.NoError(t, json.Unmarshal([]byte(resp.body), &completed))
 	assert.Equal(t, "completed", completed.Status)
 	assert.NotNil(t, completed.CompletedAt)
@@ -148,7 +148,7 @@ func TestServiceLogCarriesRequestID(t *testing.T) {
 		Version:        "test",
 		RequestTimeout: testRequestTimeout,
 		Readiness:      nil,
-		Register:       func(api huma.API) { todoapi.Register(api, service) },
+		Register:       func(api huma.API) { httpapi.Register(api, service) },
 	})
 
 	rec := httptest.NewRecorder()

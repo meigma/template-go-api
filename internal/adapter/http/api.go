@@ -1,7 +1,7 @@
 // Package http assembles the generic, resource-agnostic HTTP transport: the chi
 // router and middleware, the infrastructure routes (/healthz, /readyz, /metrics),
 // the Huma API, and server-less OpenAPI export. Resource operations are mounted by
-// their own adapter packages (for example, internal/adapter/http/todoapi) through
+// their own adapter packages (for example, internal/todo/httpapi) through
 // the Registrar seam.
 package http
 

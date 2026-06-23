@@ -2,17 +2,19 @@
 #
 # The schema is read directly from the goose migrations (sqlc understands goose
 # annotations natively, so there is no separate schema.sql to drift). Generated
-# code lands in internal/adapter/postgres/sqlc and is committed; the sqlc-check
-# moon task guards it against drift.
+# code lands in internal/todo/postgres/sqlc and is committed; the sqlc-check
+# moon task guards it against drift. The schema stays under the shared
+# internal/adapter/postgres (database-level concern), while the generated code
+# and queries live with the todo domain.
 version: "2"
 sql:
   - engine: postgresql
     schema: internal/adapter/postgres/migrations
-    queries: internal/adapter/postgres/queries
+    queries: internal/todo/postgres/queries
     gen:
       go:
         package: sqlc
-        out: internal/adapter/postgres/sqlc
+        out: internal/todo/postgres/sqlc
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         emit_interface: true
