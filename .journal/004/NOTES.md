@@ -144,3 +144,45 @@ Validation: `moon run root:check` green (9 tasks); sqlc-check green; tree clean,
 generated code unchanged. Design doc updated (tooling decision, Phase A status,
 migrations note). Proceeding to Phase B.
 
+## 2026-06-22 20:30 — Phase B complete (gate 2)
+Commit `e05ee64` on `feat/postgres-tier`: postgres adapter (postgres.go Connect+pool,
+repository.go Save/FindByID/List/Ping over sqlc, mapping.go, migrations.go embed,
+migrate.go goose-as-library), config `--store`/`--database-url`/`--db-max-conns`,
+`app.New(ctx,…)(…,error)` ripple (store selection + pool lifecycle + postgres
+`/readyz`), `migrate up/down/status` subcommand + moon task, goose v3 library
+require. Domain & transport unchanged; OpenAPIYAML stays memory-only. Implementer
+verified end-to-end vs a live Postgres (migrate works; `/readyz` → postgres ok;
+create/list round-trip persists). `moon run root:check` green; 0 blocker/major.
+Independently confirmed `go build`/`go vet` clean (the IDE gopls "BrokenImport/
+undefined" diagnostics were a worktree-not-in-go.work artifact, NOT real errors).
+
+Gate-2 items:
+- **Decision needed — created_at on upsert.** UpsertTodo omits `created_at` from
+  DO UPDATE (immutable on conflict), diverging from the memory adapter's
+  full-struct replace. Moot in real use (Complete preserves CreatedAt), but it's
+  a two-adapter contract divergence Phase C must account for. Options: match
+  memory (add `created_at = EXCLUDED.created_at`, full replace per the port's
+  "insert or replace" contract) vs keep immutable + document + special-case the
+  Phase C contract test.
+- **Polish to apply (clear):** migrationsFS godoc name mismatch ("MigrationsFS"→
+  actual unexported name); stale `app` package doc (still says only in-memory);
+  migrate URL check `== ""` → `TrimSpace`; pool not closed on the startup-failure
+  return path in app.Run (cosmetic — process exits — but worth a clean defer).
+- **Carry to Phase C:** ensure the test helper consumes `postgres.Migrations()`
+  (currently an unused exported getter — else drop it); contract test must honor
+  the created_at decision.
+
+## 2026-06-22 20:50 — Gate 2 resolved (commit bb5609c)
+User chose **full replace** for created_at (option 1; the yubikey-typo answer was
+corrected verbally). Applied directly: UpsertTodo now sets
+`created_at = EXCLUDED.created_at` (regenerated sqlc) → both adapters share
+identical insert-or-replace Save semantics. Polish: dropped the unused
+`Migrations()` getter + unexported `migrationsDir` (Phase C applies migrations via
+`postgres.Migrate`); pool now closed on every `app.Run` exit path (deferred, not
+just graceful shutdown); migrate `--database-url` uses `TrimSpace`; fixed
+migrationsFS godoc + stale app package doc. `moon run root:check` green. Doc
+updated (Phase B DONE, created_at decision, Phase C migrate guidance).
+NOTE: the IDE `gopls` "BrokenImport/undefined" diagnostics seen throughout are a
+worktree-not-in-go.work artifact — `go build`/`vet`/`root:check` are all clean.
+Proceeding to Phase C (integration tests).
+

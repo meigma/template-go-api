@@ -168,7 +168,10 @@ VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE
   SET title = EXCLUDED.title,
       status = EXCLUDED.status,
+      created_at = EXCLUDED.created_at,
       completed_at = EXCLUDED.completed_at;
+-- created_at IS replaced on conflict so Save is a full insert-or-replace,
+-- matching the in-memory adapter exactly (gate-2 decision).
 
 -- name: GetTodo :one
 SELECT id, title, status, created_at, completed_at FROM todos WHERE id = $1;
@@ -246,8 +249,12 @@ Ship **no** builder dependency. `List` stays parameter-free for now. Add:
   migrations, `Snapshot()` once, then `Restore()` between tests for fast
   isolation. Do not name the database "postgres"; mind non-default usernames.
 - Verify the adapter against the same behavioral contract the memory adapter
-  satisfies (save/get/list/upsert-idempotency/not-found).
-- A small shared helper sets up container + migrate + snapshot.
+  satisfies (save/get/list/upsert-idempotency/not-found). Save is full
+  insert-or-replace in BOTH adapters (created_at included), so the contract may
+  assert identical behavior — including that a re-save updates created_at.
+- A small shared helper sets up container + migrate + snapshot. Apply migrations
+  with `postgres.Migrate(ctx, container.MustConnectionString(...), "up")` (reuses
+  the subcommand's goose path); there is no exported migrations-FS getter.
 - Default `go test ./...` and `moon run root:check` stay hermetic (tag excludes
   the suite). New moon task **`test-integration`** runs the tagged suite (needs
   Docker). Wiring it into CI is a flagged follow-up (GitHub workflows are
@@ -280,6 +287,10 @@ config `--store`/`--database-url`/`--db-max-conns` + `Validate`; `app.New` rippl
 Acceptance: builds; `serve --store=memory` unchanged; `--store=postgres` connects
 and serves with a real `/readyz`; `migrate up/down/status` work; `moon run
 root:check` passes.
+**STATUS: DONE** — commits `e05ee64` + `bb5609c` (gate-2 fixes). Validated green,
+verified live vs Postgres. Save is full insert-or-replace (created_at replaced),
+identical to memory. Migrations are applied in code via
+`postgres.Migrate(ctx, url, "up")` (no exported FS getter).
 
 ### Phase C — Integration tests
 Scope: `repository_test.go` (`integration` tag) + shared container helper;
