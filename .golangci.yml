@@ -12,6 +12,12 @@
 
 version: "2"
 
+# Analyze build-tagged files too (e.g. the `integration` testcontainers suite),
+# so tagged code is covered by `moon run lint`/`format` and the check pipeline.
+run:
+  build-tags:
+    - integration
+
 issues:
   # Maximum count of issues with the same text.
   # Set to 0 to disable.
