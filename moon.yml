@@ -24,6 +24,8 @@ fileGroups:
     - 'sqlc.yaml'
     - 'internal/adapter/postgres/migrations/*.sql'
     - 'internal/adapter/postgres/queries/*.sql'
+    - '.prototools'
+    - '.moon/proto/sqlc.toml'
   lintConfig:
     - '.golangci.yml'
     - '.prototools'
@@ -99,7 +101,7 @@ tasks:
   # Regenerate the committed sqlc layer from the schema and queries. Run after
   # changing migrations/*.sql or queries/*.sql, then commit the result.
   sqlc:
-    command: 'go tool sqlc generate'
+    command: 'proto run sqlc -- generate'
     toolchains: ['go']
     inputs:
       - '@group(sqlcSources)'
@@ -117,10 +119,10 @@ tasks:
     script: |
       set -eu
       tmp="$(mktemp -d "${PWD}/.sqlc-check.XXXXXX")"
-      cfg="$(mktemp "${PWD}/.sqlc-check.XXXXXX.yaml")"
+      cfg="${tmp}.yaml"
       trap 'rm -rf "$tmp" "$cfg"' EXIT
       sed "s|out: internal/adapter/postgres/sqlc|out: ${tmp#"${PWD}/"}|" sqlc.yaml > "$cfg"
-      go tool sqlc generate -f "$cfg"
+      proto run sqlc -- generate -f "$cfg"
       git diff --no-index --exit-code -- internal/adapter/postgres/sqlc "$tmp"
     toolchains: ['go']
     inputs:
