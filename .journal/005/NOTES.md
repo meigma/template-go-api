@@ -131,3 +131,43 @@ Next: gap is closed for the decision that matters. Teed up to user: optional 3rd
 pass to formally verify the four ReBAC/deprecated engines, vs move to
 collaborative design (cedar-go vs Casbin default + the authz port + Huma seam).
 Design stays separate from build per `separate-mechanical-from-design-work`.
+
+## 2026-06-23 13:47 — DECISION: commit to Cedar (cedar-go), no portability layer
+Collaborated through the cedar-go vs Casbin fork. User chose to be **opinionated**:
+ship **Cedar via `cedar-go` as THE authorization engine**, drop the engine-
+portability boundary (no neutral Decision interface, no compatibility layer with
+other engines) — while keeping hexagonal hygiene. Rationale: the neutral port was
+the most expensive / least useful boundary; committing lets us expose Cedar's real
+API (typed Request, `Diagnostic` reasons, `.cedar` policy files) instead of a lossy
+LCD `bool` port, drops a DTO mapping layer, and improves the test story. Boundaries
+KEPT (not engine-portability): authn→authz handoff via opaque principal/claims in
+context; `EntityGetter` for entity sourcing (Cedar's own interface — trivial/empty
+for the coarse default, repo-backed for fine-grained later); domain (`internal/todo`)
+stays Cedar-free; one thin app-owned `internal/authz` package speaks Cedar.
+
+Design notes settled in discussion:
+- Resource-level authz (needs the loaded resource) lives in the DOWNSTREAM
+  handler/service — NOT day-one; coarse middleware default (principal + claims-as-
+  context + route action, no entity graph) ships first. User confirmed this framing.
+- The "entity graph" problem (Cedar needs entity attributes + parent/hierarchy
+  edges to evaluate `resource.owner == principal` / `principal in Group`) only
+  bites for fine-grained rules → documented `EntityGetter` extension point, not the
+  default.
+
+De-risking check (subagent, grounded in pkg.go.dev + repo README/releases):
+**cedar-go v1.8.0 (2026-06-01)**, single v1 module, official AWS org, ~monthly
+cadence. CORE LOOP IS FULLY STABLE (non-`x/`): `NewPolicySetFromBytes`/
+`NewPolicyListFromBytes` (+ runtime-mutable `PolicySet`); `cedar.Authorize(policies,
+entities, req) (Decision, Diagnostic)` (old `IsAuthorized` deprecated); `types.
+EntityGetter`/`types.EntityMap`, `Entity{UID,Parents,Attributes,Tags}`;
+`Diagnostic{Reasons[],Errors[]}` (reasons carry deciding `PolicyID`); JSON + all
+core value types. GAPS (all advanced, NOT day-one): schema validation 🧪
+experimental (`x/exp/schema`); policy templates ❌; full residual partial-eval ❌
+(only experimental batch var-substitution); policy formatter ❌. Verdict: safe
+commitment for the middleware starting point.
+
+Next: move to COLLABORATIVE DESIGN of the authz seam (capture in a design doc à la
+session 004's POSTGRES_TIER.md, then a gated build). First/biggest design fork to
+settle = HOW the developer EXPRESSES per-endpoint authorization (the UX) — Huma
+`Security` scheme-name convention vs a custom per-operation action/resource
+declaration the middleware maps into a Cedar request.
