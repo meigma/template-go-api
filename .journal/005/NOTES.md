@@ -171,3 +171,38 @@ session 004's POSTGRES_TIER.md, then a gated build). First/biggest design fork t
 settle = HOW the developer EXPRESSES per-endpoint authorization (the UX) — Huma
 `Security` scheme-name convention vs a custom per-operation action/resource
 declaration the middleware maps into a Cedar request.
+
+## 2026-06-23 14:43 — Design converged; AUTHZ_TIER.md drafted; PAUSED for review
+Collaborated through the full design across several forks; all captured in
+`.journal/005/AUTHZ_TIER.md` (journal-only, source of truth, mirrors POSTGRES_TIER.md).
+Converged decisions:
+- **Modular from day one** (user confirmed): per-slice authz contributions (policies +
+  action constants + lazy fact resolver), merged by the composition root into one
+  `PolicySet` + one composite `EntityGetter` — mirrors the HTTP registrar seam. Base
+  `internal/authz` holds engine plumbing + cross-cutting policies + shared principal
+  types; `internal/todo/todoauthz` is the todo slice; `todoapi` consumes its actions.
+- **Expression UX:** `authz.Require(action[, idParam])` / `authz.Public()` set Huma
+  operation Metadata; ONE global Huma middleware enforces (reconciled from per-op
+  middleware → global, to get deny-default). Require also populates OpenAPI `Security`.
+- **Deny-by-default** for Huma operations (undeclared → 403 + warn). Infra routes are
+  raw chi, outside the Huma authz mw.
+- **URL-fed resource identity** (user's idea): middleware sets `Request.Resource =
+  Todo::"<id>"` from the path param, no load → identity/principal-based instance authz
+  in middleware.
+- **Lazy request-scoped fact resolvers** (user's idea): composite `EntityGetter` bound
+  to request ctx (claims+repos), loads on demand; Cedar pulls only what policies
+  dereference. Two rules from the pull interface (`Get(uid)(Entity,bool)`, no ctx/err):
+  bind ctx at construction; capture first load error → 500 fail-closed; cache per
+  request (N+1). This pulls the attribute-based case back into middleware as an option
+  (double-load caveat; coarse default never triggers it).
+- Smaller forks settled (proposed): naming `Action::"todo:create"` + PascalCase types
+  + slice-prefixed policy IDs; double-load = none day-one (coarse), cache shipped.
+
+**ONE decision flagged for the user (security stakes): §8C day-one authn default** —
+dev authenticator ON by default (best demo, copy-to-prod footgun) vs OFF by default
+(safest; out-of-box protected routes 401). Recommended ON-with-guardrails but
+explicitly deferred to the user.
+
+cedar-go is a plain `go get` dep (no Proto tooling, unlike sqlc/goose). Build phasing
+in doc §12: A base package → B todo slice+wiring → C tests → D docs; branch
+`feat/authz-tier`, gated PR. PAUSED for user review of AUTHZ_TIER.md before any build.
