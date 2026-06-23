@@ -206,3 +206,12 @@ explicitly deferred to the user.
 cedar-go is a plain `go get` dep (no Proto tooling, unlike sqlc/goose). Build phasing
 in doc §12: A base package → B todo slice+wiring → C tests → D docs; branch
 `feat/authz-tier`, gated PR. PAUSED for user review of AUTHZ_TIER.md before any build.
+
+## 2026-06-23 14:52 — Review nit: slice package naming
+User: `todo/todoauthz` is redundant → use `todo/authz` (cleaner; will align the HTTP
+layer's `todoapi`→`todo/http` separately, later). Updated AUTHZ_TIER.md §2: slice dir
+is now `internal/todo/authz` (`package authz`). Consequence handled in doc: base engine
+is also `package authz`, so the composition root + `todoapi` alias the slice import
+(`todoauthz "…/internal/todo/authz"`) — dir stays clean, `todoauthz.X` in examples is
+just that alias. Cedar-free-domain rule still holds (dep runs slice→core only). Still
+paused for review; §8C (dev-auth default) remains the open user decision.

@@ -60,7 +60,7 @@ internal/
     authn.go                    #   Authenticator seam (interface) + dev authenticator
     getter.go                   #   request-scoped composite EntityGetter (lazy, error-capturing)
     base.cedar        (embed)   #   cross-cutting policies (e.g. admin override)
-  todo/todoauthz/               # the todo authz slice (imports todo + cedar; domain core does not)
+  todo/authz/                   # the todo authz slice (package authz; imports todo + cedar; domain core does not)
     policy.cedar      (embed)   #   todo-specific policies
     actions.go                  #   ActionCreate = Action::"todo:create", ActionRead, ...
     facts.go                    #   todo.Todo -> cedar.Entity (attributes + parents); the resolver
@@ -69,6 +69,16 @@ internal/
   app/                          # composition root: collects []authz.Contribution, wires Authorizer
   config/                       # new flags (see §9)
 ```
+
+**Package naming.** Per-slice authz packages live *under their domain*
+(`internal/todo/authz`, `package authz`) — not under a prefixed `todoauthz` name.
+Because the base engine package is *also* `package authz` (`internal/authz`), the two
+files that need both (the composition root and `todoapi`) alias the slice on import,
+e.g. `todoauthz "…/internal/todo/authz"`; the directory stays clean and the
+`todoauthz.X` identifier in examples below is just that alias. The dependency runs
+slice → domain core only (`internal/todo` never imports its `authz` subpackage), so the
+Cedar-free-domain rule still holds. (The HTTP layer's `todoapi` has the same prefix
+redundancy; the user intends to align it to `todo/http` separately — out of scope here.)
 
 `cedar-go` is a plain Go module dependency (`go get`), not a Proto-managed tool —
 no `.moon/proto` or `.prototools` changes (contrast the sqlc/goose tier).
