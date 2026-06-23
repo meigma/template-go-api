@@ -108,3 +108,28 @@ directly (dropping its observability import). Recover/timeout unit tests moved w
 the code; the CORS/client-IP router-level integration tests stayed in package
 `http`. Pure refactor — `moon run root:check` green (incl. spec drift-guard
 unchanged), CI green on PR #5 (commit `d433042`).
+
+Follow-up (commit `ed03df6`): user wanted the CORS/client-IP integration tests
+(which go through `NewRouter`) folded into `router_test.go` rather than living in
+their own files; consolidated and deleted `cors_test.go`/`clientip_test.go`.
+
+## 2026-06-22 17:52 — Dedicated metrics listener (review follow-up)
+
+User asked whether `/metrics` shares the app listener (it did) and preferred a
+separate listener, named explicitly `metrics` (not `admin`). Added `--metrics-addr`
+(`TEMPLATE_GO_API_METRICS_ADDR`, default `:9090`). By default `/metrics` now runs on
+its own `http.Server`, off the API listener and outside its middleware chain (so
+scrapes aren't access-logged or counted in `http_requests_total`, and metrics stay
+off the public API surface). The metrics middleware still runs on the API router, so
+request metrics are recorded as before. Empty `--metrics-addr` co-locates `/metrics`
+on the API port (`RouterDeps.ServeMetricsEndpoint` gates the inline mount).
+`app.New` builds the second server; `serve.go` Run/shutdown now manage both within
+the shared grace period. `Validate` rejects `metrics-addr == addr`. New
+`adapterhttp.NewMetricsHandler` (minimal mux, /metrics only) for the dedicated
+listener. Config/README/index docs updated; default health/readiness stay on the
+API listener (only metrics moved).
+
+Verified live: `:8087/metrics`→404, `:9097/metrics`→200, `:9097/healthz`→404, both
+"listening" logs, scrapes not self-counted, graceful shutdown of both servers
+("shutting down http server" + "shutting down metrics server" + "servers stopped").
+`moon run root:check` + CI green on PR #5 (commit `6cd0bad`).
