@@ -108,3 +108,11 @@ Open follow-ups for future slices (all seams already in place): docs render pipe
 Postgres adapter + testcontainers; OTel; rate limiting; pagination; API versioning;
 README/DELETE_ME refresh for concrete API usage; thread request-scoped logger into
 the service; optionally richer (named) readiness reporting.
+
+## 2026-06-22 18:12 — Close
+
+Closed retroactively during session 003's close-out (the session was never formally
+closed after PR #4 merged). Work was complete and merged: slice 1 →
+`master 745a9ed` (PR #4). All "open follow-ups" above were picked up and completed in
+session 003 (PR #5, `05f5446`). See `.journal/002/SUMMARY.md` for the postmortem.
+Status flipped to `complete` in INDEX.

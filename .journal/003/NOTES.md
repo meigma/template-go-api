@@ -145,3 +145,12 @@ State of the world: master is the finished hexagonal Go API-server template. Sli
 scope from TARGET_SHAPE.md is complete. Still deferred for future slices: authn/authz;
 Postgres adapter + testcontainers; OTel; rate limiting; pagination; API versioning;
 mockery. Session 003 work is done; session 002 remains formally `in-progress` in INDEX.
+
+## 2026-06-22 18:12 — Close
+
+Closed by the user's request, together with session 002 (which was never formally
+closed after PR #4). Work complete and merged: slice 2 → `master 05f5446` (PR #5, 8
+commits). Wrote `.journal/003/SUMMARY.md` and `.journal/002/SUMMARY.md`; flipped both
+INDEX rows to `complete`; updated `TECH_NOTES.md` to record that the template is built
+(code + README are now the source of truth; TARGET_SHAPE.md is historical). No code
+changes in this close-out — Phase 1 (land the work) was already done when PR #5 merged.
