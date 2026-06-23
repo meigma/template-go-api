@@ -131,6 +131,21 @@ tasks:
     options:
       cache: false
 
+  # Run the container-backed integration suite (gated by the `integration` build
+  # tag, so the default `test`/`check` stay hermetic). Requires a running Docker
+  # daemon; testcontainers starts a throwaway Postgres per run. Wiring this into
+  # CI is a follow-up — the GitHub workflows are currently `.disabled` and need a
+  # Docker-capable runner.
+  test-integration:
+    command: 'go test -tags integration ./internal/adapter/postgres/...'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+      - 'internal/adapter/postgres/migrations/*.sql'
+    options:
+      cache: false
+      runInCI: false
+
   # Run the embedded database migrations for local development. Pass the goose
   # verb and connection URL through, for example:
   #   moon run root:migrate -- up --database-url postgres://localhost:5432/app
