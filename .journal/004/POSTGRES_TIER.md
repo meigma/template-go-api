@@ -309,9 +309,16 @@ Scope: README / DELETE_ME / `docs/` updates — running with Postgres, the
 `migrate` subcommand, regenerating sqlc, running integration tests, and the
 dynamic-query guidance. Acceptance: docs build; links/commands accurate; `moon
 run root:check` passes.
+**STATUS: DONE** — commits `3460f09` + `3f4afa6` (doc-accuracy fixes). Validated
+green; commands cross-checked against source.
 
 ## Definition of done (whole tier)
 `moon run root:check` green; `moon run test-integration` green with Docker; the
 template runs with `--store=memory` (zero infra) and `--store=postgres` (real DB
 with migrations + readiness); generated code committed and drift-guarded; docs
 updated; domain & transport unchanged. Integrate via a GitHub PR (squash merge).
+
+**ACHIEVED (2026-06-23):** all four phases done; whole-tier validation green
+(root:check + live integration container). Shipped as **PR #6**
+(https://github.com/meigma/template-go-api/pull/6), branch `feat/postgres-tier`,
+awaiting review/squash-merge.

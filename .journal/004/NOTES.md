@@ -209,3 +209,28 @@ them. Nits left as-is (List timestamp collision has no assertion impact; CHECK
 constraint is Phase A's concern; helper split into two files is cleaner).
 `moon run root:check` still green. Proceeding to Phase D (docs).
 
+## 2026-06-23 — Phase D complete (gate 4); PR #6 opened
+Commit `3460f09`: docs-only (README Persistence section, DELETE_ME two-adapter +
+trim-down, docs/index.md two-store quickstart). Implementer caught/fixed a
+`/readyz` JSON-shape inaccuracy pre-commit. 0 blocker/major; 4 nits. Fixed the
+worthwhile ones in `3f4afa6`: DELETE_ME inaccurately called sqlc a "Go
+dependency" (it's a Proto plugin — corrected + added the `.golangci` build-tags
+removal to the trim-down), migrate URL consistency, self-contained docs
+quickstart (show starting a DB). Left the cosmetic relative-anchor link.
+
+Whole-tier validation (independently re-run): `moon run root:check` green; fresh
+uncached `go test -tags integration` passes vs a real postgres:17-alpine
+container (~4s); default `go test ./...` Docker-free. Diff +1482/−35 across 33
+files; domain & transport untouched.
+
+GPG snag: my non-interactive shell couldn't trigger a fresh yubikey touch, so the
+`3f4afa6` doc-fix commit failed signing 3× ("Operation cancelled"); user ran the
+signed commit once back at keyboard. (Earlier commits signed fine while the
+touch-cache was warm.)
+
+Shipped as **PR #6** (feat/postgres-tier → master, squash-merge):
+https://github.com/meigma/template-go-api/pull/6. 8 commits. Follow-up left for a
+future slice: wire `test-integration` into CI (GitHub workflows are `.disabled`,
+need a Docker runner). Session work complete pending review/merge; ready for
+`session-close` when the user calls it.
+
