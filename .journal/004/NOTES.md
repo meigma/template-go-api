@@ -25,3 +25,50 @@ Current state of the world:
 
 Plan: wait for the user's request, then scope the work and proceed per
 `.session.md`.
+
+## 2026-06-22 18:20 — Goal set: deep research on Go + PostgreSQL data access
+User's request: run a deep-research report on _modern_ (last ~12 months,
+mid-2025→mid-2026) approaches to the PostgreSQL data-access layer in Go API
+servers — raw SQL (database/sql / pgx), sqlc code-gen, query builders
+(squirrel/goqu/Bob), full ORMs (GORM/ent/Bun). User's hypothesis: opinions have
+gone MIXED, whereas ORMs used to be universally recommended — investigate
+whether the community has shifted toward sqlc / raw SQL and why. Deliverable:
+current recommendations + relative strengths/weaknesses + a clear pick suitable
+for our hexagonal template (persistence adapter behind a consumer-defined
+repository port, tested with testcontainers). This feeds the open
+"Postgres adapter + testcontainers" future-slice seam.
+
+Action: launched `deep-research` workflow (run `wf_7fd26a84-74d`,
+task `wxousgz7g`) with a refined, template-contextualized question. Awaiting
+the synthesized cited report.
+
+## 2026-06-22 18:40 — Workflow failed at synthesis; recovered via resume
+First run failed: the final `synthesize` agent (schema=REPORT_SCHEMA) blew the
+StructuredOutput retry cap (5×). Root cause from its transcript: the model bled
+tool-call parameter markup (`</parameter><parameter name="caveats">`) into the
+raw JSON payload, so it never parsed — a brittle-large-structured-output failure,
+not a data problem. Scope→search→fetch→verify all completed and were cached.
+
+Fix: edited the run's script to drop the schema from the synthesis step (free-text
+markdown out, no JSON to corrupt) and adjusted the final return. Resumed with
+`resumeFromRunId` + the same `args` (first resume attempt failed because I omitted
+`args` → hit the empty-question guard; re-ran with args). Cached prefix replayed,
+synthesis ran live, completed clean.
+
+Result: 5 angles · 15 sources · 66 claims → top 25 3-vote adversarially verified →
+24 confirmed / 1 refuted. Full report saved at
+`.journal/004/RESEARCH-go-postgres-data-access.md`.
+
+Headline conclusion: the Go community HAS shifted away from full-magic ORMs
+(GORM) toward **sqlc** (type-safe codegen from hand-written SQL) as the default
+for production; opinions are "mixed" only in the sense that choice is now
+conditional (sqlc default; ORM for CRUD/association-heavy rapid dev; ent for
+typed-ORM ergonomics; query builders like Squirrel/Bob for dynamic queries).
+Recommendation for our template: **sqlc + pgx/v5 behind the repository port +
+standalone migrations (goose/golang-migrate/atlas), tested with the
+testcontainers Postgres module (snapshot/restore)**; add Squirrel only when
+dynamic queries appear. Open questions: dynamic-query strategy, migration-tool
+pick, Bob's maturity, pgx vs database/sql. Feeds the open "Postgres adapter +
+testcontainers" seam — a DESIGN decision, not yet a build (keep separate per
+`separate-mechanical-from-design-work`).
+
