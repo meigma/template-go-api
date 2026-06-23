@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/meigma/template-go-api/internal/adapter/http/middleware"
+	"github.com/meigma/template-go-api/internal/adapter/http/problem"
 	"github.com/meigma/template-go-api/internal/observability"
 )
 
@@ -46,20 +48,20 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Client-IP runs first so the request id, access log, and metrics all see
 	// the resolved IP. CORS sits after the access log (so preflight responses are
 	// logged and metered) and is installed only when origins are configured.
-	mux.Use(clientIPMiddleware(deps.TrustedProxyHeader))
-	mux.Use(middleware.RequestID)
-	mux.Use(Recoverer(deps.Logger))
+	mux.Use(middleware.ClientIP(deps.TrustedProxyHeader))
+	mux.Use(chimiddleware.RequestID)
+	mux.Use(middleware.Recoverer(deps.Logger))
 	mux.Use(observability.RequestLogger(deps.Logger))
 	if len(deps.CORSAllowedOrigins) > 0 {
-		mux.Use(corsMiddleware(deps.CORSAllowedOrigins))
+		mux.Use(middleware.CORS(deps.CORSAllowedOrigins))
 	}
 	mux.Use(deps.Metrics.Middleware())
-	mux.Use(timeout(deps.RequestTimeout))
+	mux.Use(middleware.Timeout(deps.RequestTimeout))
 
 	// Error fallbacks: emit RFC 9457 problem+json instead of chi's text/plain 404
 	// and empty 405, so every API error response shares Huma's error shape.
 	mux.NotFound(func(w http.ResponseWriter, _ *http.Request) {
-		writeProblem(w, http.StatusNotFound, "the requested resource was not found")
+		problem.Write(w, http.StatusNotFound, "the requested resource was not found")
 	})
 	mux.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 		// chi does not pass the allowed methods to a custom handler, so rebuild
@@ -67,7 +69,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if allow := allowedMethods(mux, r.URL.Path); allow != "" {
 			w.Header().Set("Allow", allow)
 		}
-		writeProblem(w, http.StatusMethodNotAllowed, "the method is not allowed for this resource")
+		problem.Write(w, http.StatusMethodNotAllowed, "the method is not allowed for this resource")
 	})
 
 	// Resource operations are mounted by their adapter packages via the Registrar.

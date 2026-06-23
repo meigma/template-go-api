@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/meigma/template-go-api/internal/adapter/http/problem"
 	"github.com/meigma/template-go-api/internal/observability"
 )
 
@@ -133,46 +134,8 @@ func TestNotFoundReturnsProblemJSON(t *testing.T) {
 
 	resp := get(t, srv, "/does-not-exist")
 	assert.Equal(t, http.StatusNotFound, resp.status)
-	assert.Equal(t, problemContentType, resp.contentType)
+	assert.Equal(t, problem.ContentType, resp.contentType)
 	assert.Contains(t, resp.body, `"status":404`)
-}
-
-// TestRecovererReturnsProblemJSON verifies a panic becomes an RFC 9457 500.
-func TestRecovererReturnsProblemJSON(t *testing.T) {
-	t.Parallel()
-
-	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
-	inner := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("boom")
-	})
-	handler := Recoverer(discard)(inner)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
-	assert.Contains(t, rec.Body.String(), `"status":500`)
-}
-
-// TestTimeoutReturnsProblemJSON verifies an elapsed request deadline becomes an
-// RFC 9457 504 when the handler returns without writing.
-func TestTimeoutReturnsProblemJSON(t *testing.T) {
-	t.Parallel()
-
-	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	})
-	handler := timeout(time.Millisecond)(inner)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/slow", nil)
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusGatewayTimeout, rec.Code)
-	assert.Equal(t, problemContentType, rec.Header().Get("Content-Type"))
-	assert.Contains(t, rec.Body.String(), `"status":504`)
 }
 
 type testResponse struct {
