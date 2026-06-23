@@ -28,6 +28,10 @@ func (a *App) servers() []namedServer {
 // Run starts the configured HTTP servers and blocks until ctx is cancelled or a
 // server fails, then shuts every server down within the configured grace period.
 func (a *App) Run(ctx context.Context) error {
+	// Close the database pool (when postgres) on every exit path, after the
+	// servers have returned — including when a server fails to start.
+	defer a.closePool(ctx)
+
 	servers := a.servers()
 	serveErr := make(chan error, len(servers))
 	for _, s := range servers {
@@ -72,4 +76,17 @@ func (a *App) shutdown(ctx context.Context) error {
 	a.logger.InfoContext(shutdownCtx, "servers stopped")
 
 	return errors.Join(errs...)
+}
+
+// closePool closes the PostgreSQL pool when one is configured. It is deferred in
+// Run so it executes on every exit path — graceful shutdown or a server failing
+// to start — after the servers have returned, so no in-flight handler loses its
+// connection mid-request. It is a no-op for the in-memory store.
+func (a *App) closePool(ctx context.Context) {
+	if a.pool == nil {
+		return
+	}
+
+	a.logger.InfoContext(ctx, "closing database pool")
+	a.pool.Close()
 }

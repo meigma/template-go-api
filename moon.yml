@@ -18,6 +18,14 @@ fileGroups:
     - 'internal/**/*.go'
     - 'go.mod'
     - 'go.sum'
+  # Inputs that drive sqlc code generation: the config plus the SQL schema
+  # (goose migrations, which sqlc reads as its schema) and hand-written queries.
+  sqlcSources:
+    - 'sqlc.yaml'
+    - 'internal/adapter/postgres/migrations/*.sql'
+    - 'internal/adapter/postgres/queries/*.sql'
+    - '.prototools'
+    - '.moon/proto/sqlc.toml'
   lintConfig:
     - '.golangci.yml'
     - '.prototools'
@@ -90,6 +98,68 @@ tasks:
     options:
       cache: false
 
+  # Regenerate the committed sqlc layer from the schema and queries. Run after
+  # changing migrations/*.sql or queries/*.sql, then commit the result.
+  sqlc:
+    command: 'proto run sqlc -- generate'
+    toolchains: ['go']
+    inputs:
+      - '@group(sqlcSources)'
+    outputs:
+      - 'internal/adapter/postgres/sqlc/*.go'
+    options:
+      cache: false
+
+  # Drift-guard: regenerate into a throwaway directory and fail if it differs
+  # from the committed sqlc package, so the generated code can never fall out of
+  # sync with the schema/queries. sqlc resolves `out` relative to the config
+  # directory, so the temp dir lives under the repo root and is cleaned up on
+  # exit. Writes no tracked file.
+  sqlc-check:
+    script: |
+      set -eu
+      tmp="$(mktemp -d "${PWD}/.sqlc-check.XXXXXX")"
+      cfg="${tmp}.yaml"
+      trap 'rm -rf "$tmp" "$cfg"' EXIT
+      sed "s|out: internal/adapter/postgres/sqlc|out: ${tmp#"${PWD}/"}|" sqlc.yaml > "$cfg"
+      proto run sqlc -- generate -f "$cfg"
+      git diff --no-index --exit-code -- internal/adapter/postgres/sqlc "$tmp"
+    toolchains: ['go']
+    inputs:
+      - '@group(sqlcSources)'
+      - 'internal/adapter/postgres/sqlc/*.go'
+    options:
+      cache: false
+
+  # Run the container-backed integration suite (gated by the `integration` build
+  # tag, so the default `test`/`check` stay hermetic). Requires a running Docker
+  # daemon; testcontainers starts a throwaway Postgres per run. Wiring this into
+  # CI is a follow-up — the GitHub workflows are currently `.disabled` and need a
+  # Docker-capable runner.
+  test-integration:
+    command: 'go test -tags integration ./internal/integration/...'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+      - 'internal/adapter/postgres/migrations/*.sql'
+    options:
+      cache: false
+      runInCI: false
+
+  # Run the embedded database migrations for local development. Pass the goose
+  # verb and connection URL through, for example:
+  #   moon run root:migrate -- up --database-url postgres://localhost:5432/app
+  # Migrations are explicit and never run automatically by serve.
+  migrate:
+    command: 'go run ./cmd/template-go-api migrate'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+      - 'internal/adapter/postgres/migrations/*.sql'
+    options:
+      cache: false
+      runInCI: false
+
   check:
     deps:
       - 'root:format'
@@ -97,6 +167,7 @@ tasks:
       - 'root:build'
       - 'root:test'
       - 'root:openapi-check'
+      - 'root:sqlc-check'
       - 'docs:build'
     inputs:
       - '@group(goSources)'

@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,7 +23,8 @@ func TestAppWiring(t *testing.T) {
 
 	cfg := config.Load(viper.New())
 	logger := observability.NewLogger(io.Discard, slog.LevelError, "json")
-	application := app.New(cfg, logger, "test")
+	application, err := app.New(context.Background(), cfg, logger, "test")
+	require.NoError(t, err)
 
 	handler := application.Handler()
 	require.NotNil(t, handler)

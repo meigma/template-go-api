@@ -22,6 +22,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, defaultRequestTimeout, cfg.RequestTimeout)
 	assert.Empty(t, cfg.CORSAllowedOrigins)
 	assert.Empty(t, cfg.TrustedProxyHeader)
+	assert.Equal(t, StoreMemory, cfg.Store)
+	assert.Empty(t, cfg.DatabaseURL)
+	assert.Zero(t, cfg.DBMaxConns)
 }
 
 func TestLoadEnvOverride(t *testing.T) {
@@ -62,6 +65,7 @@ func TestValidate(t *testing.T) {
 		RequestTimeout: time.Second,
 		ShutdownGrace:  time.Second,
 		LogFormat:      "json",
+		Store:          StoreMemory,
 	}
 	require.NoError(t, base.Validate())
 
@@ -80,4 +84,17 @@ func TestValidate(t *testing.T) {
 	negativeTimeout := base
 	negativeTimeout.RequestTimeout = -time.Second
 	require.Error(t, negativeTimeout.Validate())
+
+	unknownStore := base
+	unknownStore.Store = "redis"
+	require.Error(t, unknownStore.Validate())
+
+	postgresNoURL := base
+	postgresNoURL.Store = StorePostgres
+	require.Error(t, postgresNoURL.Validate())
+
+	postgresWithURL := base
+	postgresWithURL.Store = StorePostgres
+	postgresWithURL.DatabaseURL = "postgres://localhost:5432/app"
+	require.NoError(t, postgresWithURL.Validate())
 }
