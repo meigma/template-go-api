@@ -108,3 +108,9 @@ Next: confirm `moon run root:check` is green, commit, push, open PR.
 Pages / Kusari pending; release + container dry-runs correctly skip on this
 branch). Watching checks to completion before handing back. Stack torn down
 locally (`docker compose down`); `template-go-api:dev` image left cached.
+
+CI green on PR #7: `ci` pass (58s), `GitHub Pages` pass (36s), `Kusari
+Inspector` pass (49s); release/container/Pages-deploy dry-runs skip as expected
+on a PR branch. PR ready for review/merge. Session work complete pending
+merge — end goal (remove the in-memory tier, default to PostgreSQL-only) is a
+separate follow-up, not in this PR.
