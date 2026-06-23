@@ -295,3 +295,14 @@ PostgreSQL tier is DONE and on master. Remaining future-slice follow-up (no date
 wire `test-integration` into CI once the `.disabled` GitHub workflows get a
 Docker-capable runner. Session ready for `session-close`.
 
+## 2026-06-23 12:28 — Close
+Session 004 closed. The PostgreSQL persistence tier shipped as **PR #6**, squash-
+merged to `master` `18b56e7`; the feature branch + worktree were removed and local
+`master` fast-forwarded. No open work remains in this session. `SUMMARY.md`
+written, `INDEX.md` row set to complete, `TECH_NOTES.md` updated (tier now built +
+the Proto-CLI and `internal/integration` conventions). Handoff: the tier is live
+and documented; the only carried follow-ups are CI-wiring of `test-integration`
+(needs a Docker runner; GitHub workflows `.disabled`) and the advisory go-digest
+license note. NOTE: INDEX also showed a session **005** `in-progress` (a separate,
+parallel session) — left untouched; only 004 was closed.
+
