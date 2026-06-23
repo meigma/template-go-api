@@ -93,3 +93,18 @@ PR: https://github.com/meigma/template-go-api/pull/5 (open, CI running).
 Still deferred (future slices): authn/authz; Postgres adapter + testcontainers;
 OTel tracing; rate limiting; pagination; API versioning; mockery. Also: session 002
 remains formally `in-progress` in INDEX despite its merge (flagged to the user).
+
+## 2026-06-22 17:25 — Middleware grouped (review follow-up on PR #5)
+
+User asked to group the middleware under `adapter/http/middleware`. Moved CORS,
+client-IP, recover, and timeout into a new `internal/adapter/http/middleware`
+package (exported `CORS`/`ClientIP`/`Recoverer`/`Timeout`). The shared RFC 9457
+writer (`writeProblem`) was used by both the middleware and the router's
+not-found/405 fallbacks, so leaving it in package `http` would have caused an
+import cycle once the middleware moved — extracted it into a small
+`internal/adapter/http/problem` leaf (`problem.Write`, `problem.ContentType`) that
+both import. `recover.go` now resolves the request-scoped logger via `logctx.From`
+directly (dropping its observability import). Recover/timeout unit tests moved with
+the code; the CORS/client-IP router-level integration tests stayed in package
+`http`. Pure refactor — `moon run root:check` green (incl. spec drift-guard
+unchanged), CI green on PR #5 (commit `d433042`).
