@@ -158,3 +158,20 @@ integrator extension point (wire a custom adapter without editing
 
 Open: awaiting PR #9 review/merge + CI. After merge, `wt remove` the impl
 worktree and close the session.
+
+## 2026-06-23 16:47 — Merged + cleaned up
+User approved (LGTM). CI green (ci, GitHub Pages, Kusari all pass; dry-run/deploy
+jobs skipped as expected). **PR #9 squash-merged to `master` `8a46286`**
+(`refactor(store): drop the in-memory adapter, ship PostgreSQL-only (#9)`).
+Cleanup: deleted remote branch `refactor/postgres-only-store`; `wt remove`'d the
+impl worktree (gone — only `master` + `journal/jmgilman` remain); local `master`
+fast-forwarded to `8a46286`.
+
+Mid-session aside the user raised (worth keeping): `mocks` has exactly ONE real
+consumer (`service_test.go`); `todotest` has two (`app_test.go`,
+`httpapi/api_test.go`). Kept mockery anyway — it's irreplaceable for the
+error-injection test (`TestServiceListPropagatesError`; the fake's `List` never
+errors) and "Save never called" assertions, and as a template it's the
+skill-mandated reference pattern downstream inherits. User agreed: fine as-is.
+
+Session goal met. Ready for `session-close`.
