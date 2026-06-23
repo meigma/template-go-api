@@ -18,6 +18,12 @@ fileGroups:
     - 'internal/**/*.go'
     - 'go.mod'
     - 'go.sum'
+  # Inputs that drive sqlc code generation: the config plus the SQL schema
+  # (goose migrations, which sqlc reads as its schema) and hand-written queries.
+  sqlcSources:
+    - 'sqlc.yaml'
+    - 'internal/adapter/postgres/migrations/*.sql'
+    - 'internal/adapter/postgres/queries/*.sql'
   lintConfig:
     - '.golangci.yml'
     - '.prototools'
@@ -90,6 +96,39 @@ tasks:
     options:
       cache: false
 
+  # Regenerate the committed sqlc layer from the schema and queries. Run after
+  # changing migrations/*.sql or queries/*.sql, then commit the result.
+  sqlc:
+    command: 'go tool sqlc generate'
+    toolchains: ['go']
+    inputs:
+      - '@group(sqlcSources)'
+    outputs:
+      - 'internal/adapter/postgres/sqlc/*.go'
+    options:
+      cache: false
+
+  # Drift-guard: regenerate into a throwaway directory and fail if it differs
+  # from the committed sqlc package, so the generated code can never fall out of
+  # sync with the schema/queries. sqlc resolves `out` relative to the config
+  # directory, so the temp dir lives under the repo root and is cleaned up on
+  # exit. Writes no tracked file.
+  sqlc-check:
+    script: |
+      set -eu
+      tmp="$(mktemp -d "${PWD}/.sqlc-check.XXXXXX")"
+      cfg="$(mktemp "${PWD}/.sqlc-check.XXXXXX.yaml")"
+      trap 'rm -rf "$tmp" "$cfg"' EXIT
+      sed "s|out: internal/adapter/postgres/sqlc|out: ${tmp#"${PWD}/"}|" sqlc.yaml > "$cfg"
+      go tool sqlc generate -f "$cfg"
+      git diff --no-index --exit-code -- internal/adapter/postgres/sqlc "$tmp"
+    toolchains: ['go']
+    inputs:
+      - '@group(sqlcSources)'
+      - 'internal/adapter/postgres/sqlc/*.go'
+    options:
+      cache: false
+
   check:
     deps:
       - 'root:format'
@@ -97,6 +136,7 @@ tasks:
       - 'root:build'
       - 'root:test'
       - 'root:openapi-check'
+      - 'root:sqlc-check'
       - 'docs:build'
     inputs:
       - '@group(goSources)'

@@ -72,6 +72,10 @@ coverage/
 docs/build/
 docs/.venv/
 
+# sqlc-check throwaway regeneration dir/config (cleaned up on success; ignored
+# so an interrupted run never leaks into the tree)
+.sqlc-check.*
+
 # OS / editor
 .DS_Store
 .idea/
