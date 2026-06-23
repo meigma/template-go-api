@@ -297,6 +297,12 @@ Scope: `repository_test.go` (`integration` tag) + shared container helper;
 `test-integration` moon task; CI-wiring note. Acceptance: `moon run
 test-integration` passes locally (Docker present); default `check` stays
 hermetic. If Docker absent, report at the gate.
+**STATUS: DONE** — commits `327daf4` + `9b67ede`. Independently verified: fresh
+uncached `go test -tags integration` spins a real postgres:17-alpine container
+and passes (~4s); default `go test ./...` stays Docker-free. golangci now lints
+the `integration`-tagged files (`run.build-tags`). NOTE for Phase D: moon's arg
+tokenizer splits on `=`, so use `-tags integration` (space) in tasks, never
+`-tags=integration`.
 
 ### Phase D — Docs
 Scope: README / DELETE_ME / `docs/` updates — running with Postgres, the

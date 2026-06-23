@@ -186,3 +186,26 @@ NOTE: the IDE `gopls` "BrokenImport/undefined" diagnostics seen throughout are a
 worktree-not-in-go.work artifact — `go build`/`vet`/`root:check` are all clean.
 Proceeding to Phase C (integration tests).
 
+## 2026-06-22 21:20 — Phase C complete (gate 3)
+Commit `327daf4`: testcontainers integration suite — `helper_test.go` (Postgres
+17-alpine container, db/user `todos_test`/`todos` (never "postgres"), migrations
+applied via `postgres.Migrate`, snapshot-once + fresh pool per `Reset`) and
+`repository_test.go` (`//go:build integration`; same behavioral contract as
+memory + postgres upsert/created_at-replace); `test-integration` moon task
+(runInCI:false). testcontainers-go + pg module added as test-only go.mod deps
+(in-scope per doc). Two sharp self-caught bugs: (1) Restore runs `DROP DATABASE …
+WITH FORCE` killing pooled conns (SQLSTATE 57P01) → fresh pool per subtest; (2)
+moon v2 arg tokenizer splits on `=`, so `-tags=integration` silently became a
+bogus pkg arg → false "[no test files]" pass; fixed to `-tags integration`.
+Validation: `moon run root:check` green AND `moon run root:test-integration`
+green (real container). **I independently re-ran** a fresh uncached
+`go test -tags integration` → real container, pass (4.2s); default test stays
+hermetic. 0 blocker/major.
+
+Gate-3 fix applied (commit `9b67ede`): the `//go:build integration` files were in
+Go's ignored set, so `moon run lint` never analyzed them — added
+`run.build-tags: [integration]` to `.golangci.yml` so the check pipeline covers
+them. Nits left as-is (List timestamp collision has no assertion impact; CHECK
+constraint is Phase A's concern; helper split into two files is cleaner).
+`moon run root:check` still green. Proceeding to Phase D (docs).
+
