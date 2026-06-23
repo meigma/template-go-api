@@ -96,3 +96,51 @@ tests), D (docs). Implementation on branch `feat/postgres-tier` in its own
 worktree; integrate via squash-merged PR. Workflow: `implement-postgres-phase`.
 Started Phase A with user's standing permission to execute.
 
+## 2026-06-22 19:35 — Phase A complete (gate 1)
+Workflow first launch passed `args` as a JSON string → guard tripped; made the
+script parse args defensively, relaunched. Phase A landed as commit `ea7f8e4`
+on `feat/postgres-tier`: sqlc.yaml (pgx/v5; uuid→google/uuid.UUID; timestamptz
+overrides for time.Time / *time.Time), goose migration 00001 (uuid PK, status
+text+CHECK), queries (UpsertTodo/GetTodo/ListTodos + commented narg example),
+`go tool` pins (sqlc 1.31.1, goose 3.27.1), moon `sqlc`/`sqlc-check` (drift guard
+wired into check), committed generated `internal/adapter/postgres/sqlc/`.
+Validation: `moon run root:check` green (9 tasks); reviewers found 0 blocker/major.
+
+Gate-1 items surfaced for human review:
+- **[minor, real] macOS mktemp bug** in the sqlc-check task: `mktemp
+  "${PWD}/.sqlc-check.XXXXXX.yaml"` — BSD mktemp only substitutes TRAILING X's,
+  so on darwin it yields a literal fixed name; a leftover from an interrupted run
+  would wedge every later run (false drift failure) and concurrent runs collide.
+  Latent (passed on the clean sequential run). Recommend fixing.
+- **go.mod/go.sum bloat** from the `go tool goose` (cmd/goose) directive, which
+  bundles every DB dialect driver as tool-only deps. The Phase B `migrate`
+  subcommand uses goose-as-a-LIBRARY (postgres only), so the goose CLI tool is
+  largely redundant (its one real use is `goose create` scaffolding). Decision
+  needed: drop the CLI tool (lean go.sum; move `create` into the subcommand) vs
+  keep it.
+- **Carry to Phase C:** UpsertTodo intentionally does NOT overwrite `created_at`
+  on conflict (immutable; matches doc), whereas the memory adapter's full-struct
+  replace does. The Phase C contract test must NOT assert a re-save mutates
+  created_at, or it fails against postgres.
+- timestamptz overrides + cors indirect→direct promotion: correct/benign.
+
+## 2026-06-22 19:55 — Gate-1 resolved: proto tooling + mktemp fix (commit 49c1564)
+User picked option #1 AND corrected the approach: **manage CLIs via proto, not
+`go tool`**. Applied directly (self-verifying tooling work):
+- Wrote local `.moon/proto/sqlc.toml` (tar.gz, amd64/arm64) and
+  `.moon/proto/goose.toml` (raw binaries, x86_64/arm64, checksums.txt verified),
+  mirroring the existing `golangci-lint.toml` `file://` convention. Verified asset
+  patterns via `gh api`; `proto install` + `proto run sqlc/goose` both work.
+- Pinned `sqlc =1.31.1` / `goose =3.27.1` in `.prototools`.
+- Removed the `tool (...)` block from go.mod; `go mod tidy` dropped goose + ALL
+  its bundled dialect drivers (modernc/sqlite, mssql, clickhouse, …); go.sum
+  103 lines; only pgx/v5 remains (used by generated code). This resolves the
+  go.sum-bloat concern more cleanly than "drop goose CLI".
+- moon `sqlc`/`sqlc-check` now use `proto run sqlc -- generate`; fixed the macOS
+  mktemp bug by deriving the temp config from the unique temp DIR (`cfg=${tmp}.yaml`).
+- `goose create` (scaffolding) now via the proto CLI → migrate subcommand stays
+  up/down/status only (doc updated). goose-as-library require lands in Phase B.
+Validation: `moon run root:check` green (9 tasks); sqlc-check green; tree clean,
+generated code unchanged. Design doc updated (tooling decision, Phase A status,
+migrations note). Proceeding to Phase B.
+

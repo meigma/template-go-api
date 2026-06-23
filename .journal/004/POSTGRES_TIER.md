@@ -39,7 +39,11 @@ builder dependency shipped (see Dynamic Queries). No auto-migrate on serve.
   adapter*, behind the port.
 - Tests: **testcontainers-go** Postgres module with snapshot/restore; gated by a
   `//go:build integration` tag and a dedicated moon task.
-- Tooling: pin `sqlc` and `goose` via **`go tool` directives** (Go 1.26 native).
+- Tooling: pin `sqlc` and `goose` as CLIs via **proto** (local TOML plugins under
+  `.moon/proto/`, mirroring `golangci-lint`), NOT `go tool` directives. (This is
+  the repo convention and keeps go.mod/go.sum free of the tools' transitive deps.)
+  `goose` is ALSO a go.mod library require (added in Phase B) for the embedded
+  `migrate` subcommand — the proto CLI and the library import are independent.
 - Generated code is **committed + drift-guarded**, mirroring the existing
   `openapi` / `openapi-check` pattern.
 - Store selection: explicit **`--store=memory|postgres`** flag (default `memory`).
@@ -198,9 +202,12 @@ shipping a builder), an optional-filter example using `sqlc.narg`:
 
 - `//go:embed migrations/*.sql` exposes an `embed.FS` consumed by goose
   (as a library) and by the integration tests.
-- New `migrate` subcommand: `migrate up | down | status`, using goose against the
-  embedded FS and the configured `--database-url`. NOT run automatically by
-  `serve` (avoids multi-replica races; migrations are explicit).
+- New `migrate` subcommand: `migrate up | down | status`, using goose **as a
+  library** (go.mod require, postgres driver only) against the embedded FS and the
+  configured `--database-url`. NOT run automatically by `serve` (avoids
+  multi-replica races; migrations are explicit). Scaffolding new migration files
+  is done with the proto-managed goose CLI (`proto run goose -- create ...`), so
+  the subcommand does NOT need a `create` verb.
 - moon task `migrate` wraps the subcommand for local dev.
 
 ## Config & composition-root changes (the intended ripple)
@@ -255,12 +262,15 @@ squash-merges). After each phase: validate, then STOP for human review.
 
 ### Phase A — Tooling + schema + generated layer
 Scope: `sqlc.yaml`; `migrations/00001_create_todos.sql`; `queries/todos.sql`
-(incl. commented narg example); `go tool` directives for sqlc + goose; moon tasks
-`sqlc` (generate) and `sqlc-check` (temp-dir regenerate + `git diff --exit-code`
-drift guard) wired into `check` deps; run generation and **commit the generated
-`internal/adapter/postgres/sqlc/` package**. No adapter wiring yet.
+(incl. commented narg example); **proto-managed** sqlc + goose CLIs (local
+`.moon/proto/{sqlc,goose}.toml` plugins + `.prototools` pins); moon tasks `sqlc`
+(`proto run sqlc -- generate`) and `sqlc-check` (temp-dir regenerate + `git diff
+--exit-code` drift guard) wired into `check` deps; run generation and **commit the
+generated `internal/adapter/postgres/sqlc/` package**. No adapter wiring yet.
 Acceptance: `moon run sqlc` is reproducible; `moon run root:check` passes
 (including the new `sqlc-check`); generated code compiles.
+**STATUS: DONE** — commits `ea7f8e4` (initial) + `49c1564` (proto migration +
+mktemp fix). Validated green. go.mod carries only pgx/v5 (no go tool deps).
 
 ### Phase B — Adapter + wiring + config + migrate subcommand
 Scope: `postgres.go`, `repository.go`, `mapping.go`, `migrations.go`;
