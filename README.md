@@ -6,25 +6,27 @@ and [Huma](https://huma.rocks) with a `todo` example resource — plus the share
 Meigma repository baseline: Moon tasks, pinned CI, Dependabot, baseline security
 settings, and an enabled Release Please and GoReleaser release layer.
 
-Two persistence adapters ship behind the same port: an in-memory store (the
-zero-infrastructure default, so the template runs with no Docker or database) and
-a PostgreSQL adapter ([pgx](https://github.com/jackc/pgx) + [sqlc](https://sqlc.dev)
-typed queries, [goose](https://github.com/pressly/goose) migrations). Pick one at
-runtime with `--store`.
+Persistence is a PostgreSQL adapter behind the domain's `todo.Repository` port
+([pgx](https://github.com/jackc/pgx) + [sqlc](https://sqlc.dev) typed queries,
+[goose](https://github.com/pressly/goose) migrations). The port stays the seam:
+implement it to back the template with a different datastore without touching the
+domain or transport.
 
 The example resource is a reference slice, not a product feature: swap it for
-your own resource and keep whichever store you need.
+your own resource and keep the persistence wiring.
 
 ## Prerequisites
 
 - Go 1.26.4
 - Moon 2.x
 - Python 3.14.3 and uv 0.11.0 (only for the MkDocs documentation project)
-- Docker (only for `--store=postgres` against a local database and for the
-  container-backed integration tests)
+- Docker (to run a local PostgreSQL for the server — see [Persistence](#persistence)
+  and [Local stack](#local-stack-docker-compose) — and for the container-backed
+  integration tests)
 
-The `sqlc` and `goose` CLIs are pinned in `.prototools` and run through Proto, so
-they are fetched on demand by Moon — there is nothing to install by hand.
+The `sqlc`, `goose`, and `mockery` CLIs are pinned in `.prototools` and run
+through Proto, so they are fetched on demand by Moon — there is nothing to install
+by hand.
 
 > **New repository from this template?** Work through [DELETE_ME.md](DELETE_ME.md)
 > first — it covers renaming the module, binary, image, and env prefix, and
@@ -32,14 +34,23 @@ they are fetched on demand by Moon — there is nothing to install by hand.
 
 ## Quickstart
 
-Build and run the server:
+The server persists to PostgreSQL, so running it needs a database. The fastest
+way to bring up the whole stack — database, migrations, seed data, and the API —
+is Docker Compose:
+
+```sh
+docker compose up --build     # API on :8080, /metrics on :9090 (see "Local stack" below)
+```
+
+To build the binary and run it against your own PostgreSQL instead, see
+[Persistence](#persistence) (`serve` is the default subcommand and needs
+`--database-url`):
 
 ```sh
 moon run root:build          # or: go build -o bin/template-go-api ./cmd/template-go-api
-./bin/template-go-api serve   # listens on :8080; `serve` is the default subcommand
 ```
 
-Exercise the example `todo` API:
+With the stack up, exercise the example `todo` API:
 
 ```sh
 # Create a todo
@@ -91,7 +102,7 @@ them) and the seed data needs the schema to exist first:
 | 1    | `postgres` | PostgreSQL 17 with a known config; the stack waits for `pg_isready`.  |
 | 2    | `migrate`  | One-shot `migrate up` — applies the embedded goose migrations.        |
 | 3    | `seed`     | One-shot — applies every `hack/sql/*.sql` (sorted) with `psql`.       |
-| 4    | `api`      | Serves with `--store=postgres` against the prebaked connection string. |
+| 4    | `api`      | Serves the API against the prebaked connection string.               |
 
 The database is **ephemeral and reproducible**: no volume is persisted, so every
 `up` rebuilds a clean database, re-runs migrations, and re-applies the seeds;
@@ -138,30 +149,29 @@ default.
 | `--shutdown-grace` | `TEMPLATE_GO_API_SHUTDOWN_GRACE` | `15s` | graceful shutdown window |
 | `--cors-allowed-origins` | `TEMPLATE_GO_API_CORS_ALLOWED_ORIGINS` | _(none)_ | allowed CORS origins (comma-separated); empty disables CORS |
 | `--trusted-proxy-header` | `TEMPLATE_GO_API_TRUSTED_PROXY_HEADER` | _(none)_ | proxy header to read the client IP from (e.g. `X-Real-IP`); empty trusts the TCP peer |
-| `--store` | `TEMPLATE_GO_API_STORE` | `memory` | persistence backend: `memory` or `postgres` |
-| `--database-url` | `TEMPLATE_GO_API_DATABASE_URL` | _(none)_ | PostgreSQL connection URL; required when `--store=postgres` |
+| `--database-url` | `TEMPLATE_GO_API_DATABASE_URL` | _(none)_ | PostgreSQL connection URL (**required**) |
 | `--db-max-conns` | `TEMPLATE_GO_API_DB_MAX_CONNS` | `0` | maximum PostgreSQL pool connections; `0` uses the driver default |
 
 CORS is off until you set origins. Client IP is read from the direct TCP peer
 unless you opt into a trusted proxy header — never from `X-Forwarded-For`
 implicitly — so the default is not spoofable.
 
-The store defaults to `memory`, so the template runs with zero infrastructure.
-`--store=postgres` requires `--database-url`; an unknown `--store` value or a
-missing URL is rejected at startup.
+`--database-url` is **required**; the server rejects a missing URL at startup.
 
 ## Persistence
 
-The `todo.Repository` port has two adapters. `--store=memory` (the default) keeps
-everything in a mutex-guarded map and needs no infrastructure. `--store=postgres`
-swaps in the PostgreSQL adapter under `internal/todo/postgres`:
-[sqlc](https://sqlc.dev) type-safe queries over a
+The `todo.Repository` port is implemented by a PostgreSQL adapter under
+`internal/todo/postgres`: [sqlc](https://sqlc.dev) type-safe queries over a
 [pgx](https://github.com/jackc/pgx) connection pool, with
 [goose](https://github.com/pressly/goose) migrations. The shared connection pool
 and migration machinery stay under `internal/adapter/postgres` as database-level
-concerns. The domain and transport layers are identical for both — only the composition root in
-`internal/app/app.go` differs, and it also registers a `postgres` readiness check
-so `/readyz` reflects database connectivity.
+concerns. The composition root in `internal/app/app.go` wires the adapter and
+registers a `postgres` readiness check so `/readyz` reflects database
+connectivity.
+
+The port is the extension seam: to back the template with a different datastore,
+implement `todo.Repository` in a new adapter and wire it in `app.go` (or inject it
+via `app.WithRepository`) — the domain and transport layers stay untouched.
 
 ### Running with PostgreSQL
 
@@ -178,7 +188,7 @@ Apply migrations, then serve against the database:
 
 ```sh
 ./bin/template-go-api migrate up           # create the schema
-./bin/template-go-api serve --store=postgres
+./bin/template-go-api serve                # reads TEMPLATE_GO_API_DATABASE_URL
 curl -sS localhost:8080/readyz             # => {"status":"ready","checks":{"postgres":"ok"}}
 ```
 
@@ -278,6 +288,28 @@ The rule: query-builder types must never appear in a port signature. The domain
 speaks in domain criteria; only the adapter knows SQL. Swapping Squirrel for Bob,
 or back to plain sqlc, then stays a change inside one package.
 
+## Testing
+
+Unit tests sit beside the code and use [Testify](https://github.com/stretchr/testify)
+(`assert` / `require`). Repository doubles are **mockery-generated** testify mocks,
+committed under `internal/todo/mocks` and drift-guarded like the sqlc layer:
+
+```sh
+moon run root:mockery        # regenerate internal/todo/mocks from the ports
+```
+
+`moon run root:mockery-check` (part of `root:check`) regenerates into a throwaway
+directory and fails if the committed mocks are stale, so they can never drift from
+the interfaces. Add a port to `.mockery.yaml`, then regenerate and commit. Use the
+generated mock for interaction and error-injection assertions — see
+`internal/todo/service_test.go`.
+
+For tests that need a real, stateful store end to end — such as the HTTP
+functional tests that create a todo and read it back — a small in-memory fake
+lives in `internal/todo/todotest`, kept deliberately separate from the generated
+mocks. The container-backed [integration tests](#integration-tests) cover the
+PostgreSQL adapter against a real database.
+
 ## Project layout
 
 The server follows pragmatic hexagonal (ports & adapters) layering: the domain
@@ -290,10 +322,11 @@ internal/
   config/                   server runtime config (flags + TEMPLATE_GO_API_* env)
   todo/                     domain: entity, Repository port, Service (the example)
     httpapi/                inbound transport: the todo resource's DTOs, mapping, handlers
-    memory/                 outbound adapter: in-memory Repository implementation
     postgres/               outbound adapter: PostgreSQL Repository (pgx + sqlc)
       queries/              hand-written sqlc queries
       sqlc/                 generated, committed, drift-guarded query layer
+    mocks/                  generated testify mock of the Repository port (mockery)
+    todotest/               in-memory Repository fake for tests
   adapter/                  shared, cross-domain infrastructure (not domain-specific)
     http/                   generic transport: chi router, middleware, RFC 9457 errors,
                             /healthz /readyz /metrics, OpenAPI export, Registrar seam
@@ -307,6 +340,7 @@ compose.yaml                day-one local stack: postgres + migrate + seed + api
 hack/sql/                   *.sql seeds applied to the Compose database (local dev)
 docs/                       MkDocs site; docs/docs/openapi.yaml is the exported spec
 sqlc.yaml                   sqlc generation config (repo root)
+.mockery.yaml               mockery generation config (repo root)
 ```
 
 ## Adding a resource
@@ -317,7 +351,7 @@ Each resource owns its code under `internal/<resource>/`: the domain core at the
 package root, with its adapters nested beneath it.
 
 1. Add a domain package `internal/<resource>` (entity + `Repository` port + `Service`), mirroring `internal/todo`.
-2. Implement the port in a nested adapter — start from `internal/<resource>/memory` for zero-infra, or mirror `internal/todo/postgres` for a real datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
+2. Implement the port in a nested adapter — mirror `internal/todo/postgres` for a PostgreSQL-backed datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
 3. Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
 4. Add one `Register` call in `registerResources` in `internal/app/app.go`.
 
@@ -351,16 +385,19 @@ moon run root:test
 moon run root:check    # the aggregate gate CI runs via `moon ci --summary minimal`
 ```
 
-Persistence-related tasks (see [Persistence](#persistence)):
+Persistence- and testing-related tasks (see [Persistence](#persistence) and
+[Testing](#testing)):
 
 ```sh
 moon run root:sqlc              # regenerate the committed sqlc query layer
+moon run root:mockery           # regenerate the committed testify mocks
 moon run root:migrate -- up     # apply migrations (pass --database-url after --)
 moon run root:test-integration  # container-backed adapter tests (needs Docker)
 ```
 
-`root:check` already runs `sqlc-check` (a drift guard for the generated layer)
-alongside the formatter, linter, build, tests, and OpenAPI drift guard.
+`root:check` already runs `sqlc-check` and `mockery-check` (drift guards for the
+generated query layer and mocks) alongside the formatter, linter, build, tests,
+and OpenAPI drift guard.
 
 ## Container Image
 

@@ -4,7 +4,7 @@ import "context"
 
 // Repository is the outbound port the todo service depends on for persistence.
 // It is declared here, by its consumer, and implemented by adapters (for example,
-// an in-memory or SQL store).
+// a PostgreSQL store).
 type Repository interface {
 	// Save persists the todo, inserting or replacing any existing entry.
 	Save(ctx context.Context, todo Todo) error

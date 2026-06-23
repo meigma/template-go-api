@@ -20,7 +20,7 @@ import (
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
 	"github.com/meigma/template-go-api/internal/todo/httpapi"
-	"github.com/meigma/template-go-api/internal/todo/memory"
+	"github.com/meigma/template-go-api/internal/todo/todotest"
 )
 
 const testRequestTimeout = 5 * time.Second
@@ -31,13 +31,13 @@ type testResponse struct {
 	contentType string
 }
 
-// newTestServer wires the real generic router to the real todo adapter and the
-// real in-memory store, exercising the full request path end to end.
+// newTestServer wires the real generic router to the real todo adapter and a
+// stateful in-memory test repository, exercising the full request path end to end.
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
-	service := todo.NewService(memory.NewTodoRepository(), discard)
+	service := todo.NewService(todotest.NewRepository(), discard)
 	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
 		Logger:         discard,
 		Metrics:        observability.NewMetrics(),
@@ -141,7 +141,7 @@ func TestServiceLogCarriesRequestID(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := observability.NewLogger(&buf, slog.LevelInfo, "json")
-	service := todo.NewService(memory.NewTodoRepository(), logger)
+	service := todo.NewService(todotest.NewRepository(), logger)
 	handler := adapterhttp.NewRouter(adapterhttp.RouterDeps{
 		Logger:         logger,
 		Metrics:        observability.NewMetrics(),
