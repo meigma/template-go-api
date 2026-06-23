@@ -7,3 +7,4 @@
 | 003 | 2026-06-22 | Finish API-server template — slice 2 / deferred follow-ups | complete | Completed the template: docs render pipeline + drift-guard, CORS, safe client-IP, request-scoped logging, named readiness, dedicated metrics listener, docs refresh — PR #5 merged. |
 | 004 | 2026-06-22 | PostgreSQL persistence tier (research → build) | complete | Researched modern Go+PostgreSQL data access, then designed and shipped the sqlc+pgx+goose+testcontainers persistence tier behind the repository port via a gated multi-agent workflow — PR #6 merged (`18b56e7`). |
 | 005 | 2026-06-23 | Session 005 | in-progress | Session opened; awaiting the user's request. |
+| 006 | 2026-06-23 | Docker Compose day-one stack (API + PostgreSQL) | in-progress | Set up a Docker Compose stack so day-one runs of the template exercise the full API + PostgreSQL backend. |
