@@ -137,7 +137,7 @@ tasks:
   # CI is a follow-up — the GitHub workflows are currently `.disabled` and need a
   # Docker-capable runner.
   test-integration:
-    command: 'go test -tags integration ./internal/adapter/postgres/...'
+    command: 'go test -tags integration ./internal/integration/...'
     toolchains: ['go']
     inputs:
       - '@group(goSources)'

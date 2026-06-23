@@ -202,14 +202,17 @@ column to `github.com/google/uuid.UUID` and `timestamptz` to `time.Time` /
 
 ### Integration tests
 
-The PostgreSQL adapter is covered by container-backed tests behind a build tag, so
-the default `go test ./...` and `moon run root:check` stay hermetic (no Docker).
-The tagged suite uses [testcontainers](https://golang.testcontainers.org/) to spin
-a throwaway `postgres:17-alpine`, applies the embedded migrations, and snapshots
-the clean schema for fast per-test isolation. It requires a running Docker daemon:
+Integration tests live in their own package, `internal/integration` (package
+`integration`, `//go:build integration`), separate from the unit tests that sit
+beside the code, and drive the adapters through their public APIs. The suite is
+container-backed and behind the build tag, so the default `go test ./...` and
+`moon run root:check` stay hermetic (no Docker). It uses
+[testcontainers](https://golang.testcontainers.org/) to spin a throwaway
+`postgres:17-alpine`, applies the embedded migrations, and snapshots the clean
+schema for fast per-test isolation. It requires a running Docker daemon:
 
 ```sh
-moon run root:test-integration   # or: go test -tags integration ./internal/adapter/postgres/...
+moon run root:test-integration   # or: go test -tags integration ./internal/integration/...
 ```
 
 Wiring `test-integration` into CI is a follow-up: the GitHub workflows are
