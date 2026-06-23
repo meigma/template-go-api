@@ -68,12 +68,35 @@ tasks:
     options:
       cache: false
 
+  # Regenerate the committed OpenAPI spec from the server code. Run after
+  # changing the API; docs:build renders the committed result.
+  openapi:
+    command: 'go run ./cmd/template-go-api openapi --output docs/docs/openapi.yaml'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+    outputs:
+      - 'docs/docs/openapi.yaml'
+
+  # Drift-guard: regenerate to a temp file and fail if it differs from the
+  # committed spec, so the spec can never fall out of sync with the code. Writes
+  # no tracked file, so it never races docs:build reading the committed spec.
+  openapi-check:
+    script: 'tmp="$(mktemp)" && go run ./cmd/template-go-api openapi --output "$tmp" && git diff --no-index --exit-code -- docs/docs/openapi.yaml "$tmp"'
+    toolchains: ['go']
+    inputs:
+      - '@group(goSources)'
+      - 'docs/docs/openapi.yaml'
+    options:
+      cache: false
+
   check:
     deps:
       - 'root:format'
       - 'root:lint'
       - 'root:build'
       - 'root:test'
+      - 'root:openapi-check'
       - 'docs:build'
     inputs:
       - '@group(goSources)'
