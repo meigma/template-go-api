@@ -123,10 +123,13 @@ func (m *Middleware) authorize(ctx huma.Context, next func(huma.Context)) {
 	decl, ok := declarationFrom(ctx.Operation())
 	if !ok {
 		// Fail-closed: a route that declared neither Require nor Public is a
-		// programming omission, not a public endpoint.
+		// server-side programming omission, not a missing-credential case, so it
+		// is always 403 (never 401) — credentials can never satisfy a route that
+		// declares no requirement, and a 401 would invite a pointless retry. This
+		// matches the design's undeclared = deny-403 framing.
 		m.logger.WarnContext(ctx.Context(), "denying undeclared operation",
 			slog.String("operation", ctx.Operation().OperationID))
-		m.deny(ctx, principal)
+		m.writeErr(ctx, http.StatusForbidden, genericForbidden)
 
 		return
 	}

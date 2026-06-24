@@ -163,6 +163,19 @@ func TestMiddlewareDeniesUndeclaredOperation(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
 
+func TestMiddlewareDeniesUndeclaredOperationForAnonymousWith403(t *testing.T) {
+	t.Parallel()
+
+	// An undeclared route is a server-side omission, not a missing-credential
+	// case: an anonymous caller is denied 403, not 401, because no credential can
+	// ever satisfy a route that declares no requirement.
+	authn := mocks.NewAuthenticator(t)
+	authn.EXPECT().Authenticate(mock.Anything).Return(authz.Anonymous(), nil)
+
+	resp := newTestAPI(t, authn).Get("/undeclared")
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+}
+
 // failingResolver owns the Todo type and reports a load error whenever Cedar
 // dereferences an entity, so the fail-closed path can be exercised.
 type failingResolver struct {

@@ -49,6 +49,26 @@ func TestNewRejectsSliceClaimingReservedPrincipalType(t *testing.T) {
 	assert.Contains(t, err.Error(), string(PrincipalType))
 }
 
+func TestNewRejectsResolverWithoutTypes(t *testing.T) {
+	t.Parallel()
+
+	// A slice with a Resolver but no Types would be registered under zero type
+	// keys and never invoked, so its policies' entity dereferences would silently
+	// fail closed. The misconfiguration must fail startup, not at request time.
+	_, err := New([]Contribution{{Resolver: nopResolver}})
+	require.Error(t, err, "a Resolver with no declared Types must fail construction")
+	assert.Contains(t, err.Error(), "Types")
+}
+
+func TestNewAllowsCoarseSliceWithoutResolver(t *testing.T) {
+	t.Parallel()
+
+	// A slice contributing only coarse policies (no Resolver) may leave Types
+	// empty — there is nothing to route.
+	_, err := New([]Contribution{{Policies: []byte(`permit (principal, action, resource);`)}})
+	require.NoError(t, err, "a coarse slice with no Resolver may omit Types")
+}
+
 func TestNewAllowsDistinctTypes(t *testing.T) {
 	t.Parallel()
 

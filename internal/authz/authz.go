@@ -104,6 +104,9 @@ func New(contributions []Contribution, opts ...Option) (*Authorizer, error) {
 //     so a slice resolver can never shadow the always-present principal resolver.
 //   - No two slices may claim the same type, so a lookup routes to exactly one
 //     resolver and a type's facts have a single source of truth.
+//   - A slice supplying a Resolver must declare the types it owns: the composite
+//     getter routes purely by Types, so a resolver with no declared types is never
+//     invoked and any policy dereferencing its entities silently fails closed.
 //
 // A misconfigured contribution set therefore fails startup rather than silently
 // shadowing facts or the principal at request time.
@@ -116,6 +119,12 @@ func validateTypeOwnership(contributions []Contribution) error {
 
 	owner := make(map[string]int)
 	for i, c := range contributions {
+		if c.Resolver != nil && len(c.Types) == 0 {
+			return fmt.Errorf(
+				"contribution %d supplies a Resolver but declares no Types: a resolver is routed only by the types it owns, so it would never be invoked",
+				i,
+			)
+		}
 		for _, t := range c.Types {
 			if _, isReserved := reserved[t]; isReserved {
 				return fmt.Errorf(

@@ -27,10 +27,6 @@ import (
 // bearerPrefix is the scheme prefix of an Authorization: Bearer credential.
 const bearerPrefix = "Bearer "
 
-// principalType is the Cedar entity type assigned to an API-key principal. Its
-// id is the key's subject (for example User::"alice").
-const principalType types.EntityType = "User"
-
 // ErrInvalidKey is returned when a credential is present but does not resolve to
 // a known principal. The authn middleware maps it to 401. A request with no
 // credential is not an error — it yields the anonymous principal.
@@ -118,7 +114,10 @@ func toPrincipal(identity Identity) authz.Principal {
 	}
 
 	return authz.Principal{
-		UID: types.NewEntityUID(principalType, types.String(identity.Subject)),
+		// Mint the principal under authz.PrincipalType: the composite getter routes
+		// principal lookups by the principal's UID type, so the type the
+		// authenticator stamps must be the one the base principal resolver owns.
+		UID: types.NewEntityUID(authz.PrincipalType, types.String(identity.Subject)),
 		Claims: types.NewRecord(types.RecordMap{
 			authz.RolesClaim: types.NewSet(roleValues...),
 		}),

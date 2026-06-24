@@ -50,6 +50,19 @@ type errorSinkKey struct{}
 // then builds each contribution's resolver bound to that context and the
 // principal, indexing them by the entity types they own. Slices with no Resolver
 // contribute nothing.
+//
+// Routing has two layers, keeping the precedence-fix guarantee while not breaking
+// custom principal types:
+//   - Slice resolvers route by their statically declared Types — never the
+//     resolver's runtime Types() — so a slice resolver cannot claim a type it did
+//     not declare (and [New] rejected) and thereby shadow the principal resolver.
+//   - The always-present principal resolver additionally routes under the
+//     principal's actual UID type (p.UID.Type), so a custom Authenticator minting
+//     a non-User principal (for example Service::"x") still resolves its entity
+//     and projects its role parents. When a slice already owns that type (a custom
+//     principal type that collides with a slice's data type), the principal
+//     resolver is chained ahead of the slice resolver for the exact principal UID
+//     only; the slice still serves its own instances of that type.
 func newGetter(ctx context.Context, p Principal, contributions []Contribution) *getter {
 	g := &getter{
 		byType: make(map[string]EntityResolver),
@@ -60,11 +73,19 @@ func newGetter(ctx context.Context, p Principal, contributions []Contribution) *
 	// can report a load failure even though Get cannot return an error.
 	g.ctx = context.WithValue(ctx, errorSinkKey{}, g.setErr)
 
+	var principalResolver EntityResolver
 	for _, c := range contributions {
 		if c.Resolver == nil {
 			continue
 		}
 		resolver := c.Resolver(g.ctx, p)
+		if isPrincipalResolver(resolver) {
+			// Routed last, under the principal's actual UID type, so it survives a
+			// custom principal type and never depends on slice ordering.
+			principalResolver = resolver
+
+			continue
+		}
 		// Route by the contribution's statically declared Types, not the
 		// resolver's runtime Types(), so a slice resolver cannot claim a type it
 		// did not declare (and [New] rejected) and thereby shadow the principal
@@ -75,7 +96,60 @@ func newGetter(ctx context.Context, p Principal, contributions []Contribution) *
 		}
 	}
 
+	if principalResolver != nil {
+		g.routePrincipal(principalResolver, p.UID.Type)
+	}
+
 	return g
+}
+
+// routePrincipal indexes the always-present principal resolver under the
+// principal's actual UID type. If a slice already owns that type (a custom
+// principal type colliding with a slice's data type), the two are chained so the
+// principal resolver answers the exact principal UID and the slice answers its
+// own instances; otherwise the principal resolver owns the type outright.
+func (g *getter) routePrincipal(principalResolver EntityResolver, principalType types.EntityType) {
+	key := string(principalType)
+	if existing, ok := g.byType[key]; ok {
+		g.byType[key] = principalFirst{principal: principalResolver, fallback: existing}
+
+		return
+	}
+
+	g.byType[key] = principalResolver
+}
+
+// isPrincipalResolver reports whether r is the base principal resolver, so
+// newGetter can route it under the principal's actual UID type rather than its
+// statically declared reserved types alone.
+func isPrincipalResolver(r EntityResolver) bool {
+	_, ok := r.(*principalResolver)
+
+	return ok
+}
+
+// principalFirst chains the principal resolver ahead of a slice resolver that
+// owns the same Cedar type as a custom principal. The principal resolver only
+// matches its own bound UID, so a miss falls through to the slice resolver, which
+// owns every other instance of that type.
+type principalFirst struct {
+	principal EntityResolver
+	fallback  EntityResolver
+}
+
+// Types reports the union of both chained resolvers' owned types.
+func (p principalFirst) Types() []string {
+	return append(p.principal.Types(), p.fallback.Types()...)
+}
+
+// Resolve tries the principal resolver first (it matches only the principal's own
+// UID) and falls back to the slice resolver for every other instance of the type.
+func (p principalFirst) Resolve(uid types.EntityUID) (types.Entity, bool) {
+	if entity, ok := p.principal.Resolve(uid); ok {
+		return entity, true
+	}
+
+	return p.fallback.Resolve(uid)
 }
 
 // RecordLoadError reports a fact-load failure to the request's getter so the
