@@ -119,3 +119,58 @@ Remaining loose threads (for the rest of the session): session 005 stuck
 (`.agents/skills/codex-security-scan/`, `.codex-security/`, `.claude/`);
 defense-in-depth checksum pinning for the other 3 Proto plugins; other
 future-slice seams (OTel tracing, rate limiting).
+
+## 2026-06-24 11:51 — Rate limiting: decision + plan
+
+Next thread (user-chosen): **build rate limiting**.
+
+**Design decisions (user-confirmed via AskUserQuestion):**
+- **Scope: per-IP, pre-auth** (over per-principal / layered). Protects the auth
+  path + DB (every request hits `api_keys`) from anonymous floods; key func is
+  the seam to evolve to per-principal.
+- **Backend: in-process token bucket + documented Redis seam, behind a
+  `ratelimit.Limiter` port** (over shipping Redis now / no-port). Matches the
+  repo's port+adapter+seam idiom (`todo.Repository`, `Authenticator`).
+
+**Grounding (verified against Huma v2.38.0 + chi v5.3.0 + module graph):**
+- `golang.org/x/time v0.11.0` already in the graph → use `x/time/rate` (token
+  bucket), no new direct-dep risk.
+- Implement as a **Huma middleware** (like authz): auto-exempts infra routes
+  (they bypass Huma), native RFC 9457 via `huma.WriteErr`, `ctx.SetHeader` for
+  `Retry-After`. "Pre-auth" = install order: rate-limit middleware installed
+  BEFORE authz's `authenticate`, so a limited request never touches the DB.
+- Client IP at the Huma layer: `humachi.Unwrap(ctx)` → `*http.Request` →
+  `chimiddleware.GetClientIP(r.Context())` (the existing ClientIP middleware,
+  spoof-safe via `--trusted-proxy-header`, already populated it).
+- **Headers decision:** ship `Retry-After` (RFC 9110, unambiguous) on 429. The
+  IETF `RateLimit`/`RateLimit-Policy` structured-field headers are still a DRAFT
+  (draft-ietf-httpapi-ratelimit-headers-11, May 2026) and the token-bucket→
+  window mapping is approximate, so DON'T ship an approximate impl in a template
+  others copy verbatim — document the draft as a noted enhancement instead.
+- **OpenAPI:** 429 is cross-cutting middleware, not per-op (authz didn't add
+  401/403 per-op either) → do NOT add 429 to each operation. Spec UNCHANGED, no
+  regen, openapi-check stays green.
+
+**Layering (hexagonal):**
+- New `internal/ratelimit`: `Limiter` port + `Decision` (limiter.go); in-process
+  token-bucket adapter w/ per-key `*rate.Limiter` registry + idle-eviction
+  janitor + `Stop()` (memory.go); `Middleware` taking a router-agnostic
+  `KeyFunc func(huma.Context)(string,error)`, `Install()` via `UseMiddleware`,
+  inert when disabled (middleware.go). Imports huma only (like authz), NOT chi.
+- `internal/adapter/http`: a `ClientIPKeyFunc` helper (humachi+GetClientIP) —
+  the chi-specific key extraction stays in the transport adapter; `RouterDeps`
+  gains `InstallRateLimit func(huma.API)` called BEFORE `InstallAuthz`.
+- `internal/app/app.go`: build the limiter (if enabled) + install hook; store
+  the limiter on `App` and `Stop()` it on shutdown (mirror `closePool`).
+- `internal/config`: `--rate-limit-enabled` (default true, like authz),
+  `--rate-limit-rps` (default 10), `--rate-limit-burst` (default 20) + env +
+  Load + setDefaults + config_test.
+
+**Test strategy:** unit `memory_test.go` (burst→deny→refill) + `middleware_test.go`
+(humatest: allow/deny, 429 RFC9457 shape + Retry-After, per-key isolation,
+disabled passthrough). Keep the authz e2e deterministic by setting
+`rate-limit-enabled=false` in `e2eServer` (orthogonal concern). app_test (1-2
+reqs) passes under default-on. Docs: README (Rate limiting section + flags),
+DELETE_ME (inventory + seam), router.go stale "rate limiting" seam comment.
+
+Next: worktree off `master`, implement, `root:check` + integration suite, PR.
