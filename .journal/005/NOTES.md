@@ -417,3 +417,31 @@ Review lens tuned for the TEST-phase risk = false greens (stub/disabled authz, a
 not distinguished, container not used). Validate runs BOTH `root:check` and
 `test-integration` (real container; Docker worked in session 004's workflow). Awaiting
 completion → gate-3.
+
+## 2026-06-23 19:20 — Phase C COMPLETE (gate 3); container suite green, independently verified
+Workflow `wf_415d45a2-0ee` done (5 agents); 0 blocker/major. Commit `e12f76d` added
+`internal/integration/apikey_store_test.go` (TestAPIKeyStoreAdapter, 6 subtests — REAL
+postgres APIKeyStore + Authenticator: subject/roles[] parsing, unknown→miss-not-error,
+exact PK match, empty-roles→empty slice, X-API-Key→Principal, unknown→ErrInvalidKey) and
+`internal/integration/authz_e2e_test.go` (TestAuthzEndToEnd, 6 subtests — FULL stack via
+app.New, authz ENABLED, real postgres authenticator, NO stubs: no cred→401, guest role→403,
+user key→2xx CRUD/list/get/complete, admin→allowed via base, Bearer also works, unknown→401),
+plus a `ResetPool` fixture helper. Default `go test ./...` stays hermetic (tag-gated).
+**I independently re-ran** `go test -count=1 -tags integration ./internal/integration/...`
+→ real postgres:17-alpine container, PASS (14.3s); `moon run root:check` green.
+
+Review: 7 findings, 0 blocker/major (fix step skipped). I applied the 3 worthwhile quality
+fixes myself (commit `3728663`): dropped two "the design" references from test comments
+(repo convention = no design-doc refs in code) and corrected the e2e godoc/inline comment
+that overstated it "proves" Cedar URL-id binding (the coarse policy is resource-agnostic, so
+the genuine binding proof is the unit `TestMiddlewareBindsURLIDToResource`; reworded + pointed
+to it). Re-verified: `go vet -tags integration` + `moon run root:check` green.
+
+Deferred nits (harmless, mentioned to user): e2e leaks app's pgx pool (would need a prod
+App.Close API for a test-only short-lived leak); deny subtests assert status not the RFC9457
+body (layer ordering already rules out a 404/422 masquerade); no full-stack public/undeclared
+e2e route (covered at the middleware layer — TestMiddlewareAllowsPublicOperation /
+DeniesUndeclaredOperation — would need synthetic routes).
+
+Branch `feat/authz-tier` = 8 commits, held local. PAUSED for gate-3 → Phase D (docs +
+`hack/sql` mock-keys seed + README/DELETE_ME + docs/index) then squash-merge PR.
