@@ -201,6 +201,7 @@ default.
 | `--rate-limit-enabled` | `TEMPLATE_GO_API_RATE_LIMIT_ENABLED` | `true` | enable per-client [rate limiting](#rate-limiting); `false` disables throttling entirely |
 | `--rate-limit-rps` | `TEMPLATE_GO_API_RATE_LIMIT_RPS` | `10` | sustained per-client request rate (requests/second) |
 | `--rate-limit-burst` | `TEMPLATE_GO_API_RATE_LIMIT_BURST` | `20` | per-client burst size (token-bucket depth) |
+| `--tracing-enabled` | `TEMPLATE_GO_API_TRACING_ENABLED` | `false` | enable OpenTelemetry [tracing](#tracing); the OTLP exporter is configured via the standard `OTEL_*` env vars |
 
 CORS is off until you set origins. Client IP is read from the direct TCP peer
 unless you opt into a trusted proxy header — never from `X-Forwarded-For`
@@ -470,6 +471,37 @@ the key function (`adapterhttp.ClientIPKeyFunc`) for one that reads the principa
 > (`RateLimit`/`RateLimit-Policy`) are still a draft and map only loosely onto a
 > token bucket, so the template advertises the limit with the stable `Retry-After`
 > header and leaves those headers as a documented enhancement.
+
+## Tracing
+
+Distributed tracing is [OpenTelemetry](https://opentelemetry.io)-based and
+**opt-in** (`--tracing-enabled`, default false) because it needs an external
+collector. When enabled, the server exports spans over **OTLP/HTTP** and is
+configured entirely through the standard `OTEL_*` environment variables — there
+are no bespoke endpoint or sampler flags:
+
+```sh
+TEMPLATE_GO_API_TRACING_ENABLED=true \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_SERVICE_NAME=template-go-api \
+OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=0.1 \
+  ./bin/template-go-api serve --database-url ...
+```
+
+What is instrumented out of the box:
+
+- **Inbound HTTP** — every request is a server span (`otelhttp`) that extracts
+  W3C trace context for propagation. Spans are named by operation (for example
+  `get-todo`) for low cardinality. The infrastructure routes (`/healthz`,
+  `/readyz`, `/metrics`) are excluded so health checks and scrapes do not flood
+  the backend.
+- **PostgreSQL** — each query is a child span ([`otelpgx`](https://github.com/exaring/otelpgx)
+  on the pool), so a trace shows the SQL under the request that issued it.
+
+`service.name`/`service.version` default to the app name and build version and
+are overridable via `OTEL_SERVICE_NAME` / `OTEL_RESOURCE_ATTRIBUTES`. The tracer
+provider is flushed on graceful shutdown. To trace your own domain logic, start
+child spans with the global tracer (`otel.Tracer(...)`) inside the service layer.
 
 ## Testing
 

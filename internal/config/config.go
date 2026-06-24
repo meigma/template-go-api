@@ -42,6 +42,10 @@ const (
 	// defaultRateLimitBurst is the per-client token-bucket depth: how many
 	// requests a client may make in a burst before the sustained rate applies.
 	defaultRateLimitBurst = 20
+	// defaultTracingEnabled is false: distributed tracing requires an external
+	// OpenTelemetry collector, so it is opt-in. Enable it and configure the
+	// exporter via the standard OTEL_* environment variables.
+	defaultTracingEnabled = false
 )
 
 // Config holds runtime settings for the API server.
@@ -100,6 +104,10 @@ type Config struct {
 	// RateLimitBurst is the per-client token-bucket depth: the number of requests
 	// a client may make in a burst before the sustained RateLimitRPS applies.
 	RateLimitBurst int
+	// TracingEnabled turns on OpenTelemetry distributed tracing. It defaults to
+	// false because tracing needs an external collector; the exporter is then
+	// configured via the standard OTEL_* environment variables.
+	TracingEnabled bool
 }
 
 // RegisterFlags declares the server configuration flags on flags. Binding them
@@ -144,6 +152,11 @@ func RegisterFlags(flags *pflag.FlagSet) {
 	)
 	flags.Float64("rate-limit-rps", defaultRateLimitRPS, "sustained per-client request rate (requests per second)")
 	flags.Int("rate-limit-burst", defaultRateLimitBurst, "per-client burst size (token-bucket depth)")
+	flags.Bool(
+		"tracing-enabled",
+		defaultTracingEnabled,
+		"enable OpenTelemetry tracing (OTLP); configure the exporter via the standard OTEL_* env vars",
+	)
 }
 
 // Load reads the server configuration from vp, applying defaults for unset keys.
@@ -170,6 +183,7 @@ func Load(vp *viper.Viper) Config {
 		RateLimitEnabled:   vp.GetBool("rate-limit-enabled"),
 		RateLimitRPS:       vp.GetFloat64("rate-limit-rps"),
 		RateLimitBurst:     vp.GetInt("rate-limit-burst"),
+		TracingEnabled:     vp.GetBool("tracing-enabled"),
 	}
 }
 
@@ -225,4 +239,5 @@ func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("rate-limit-enabled", defaultRateLimitEnabled)
 	vp.SetDefault("rate-limit-rps", defaultRateLimitRPS)
 	vp.SetDefault("rate-limit-burst", defaultRateLimitBurst)
+	vp.SetDefault("tracing-enabled", defaultTracingEnabled)
 }
