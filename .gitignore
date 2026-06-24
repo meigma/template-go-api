@@ -2,10 +2,15 @@
 .moon/cache/
 .moon/docker/
 
-# Agent/runtime state (`.agents/skills` is committed template content, not ignored)
+# Agent/runtime state. `.agents/skills` holds committed template skills; the
+# entries below are local maintainer tooling and runtime state, not template
+# content. `.codex-security/` is Codex scan output; `codex-security-scan` is a
+# local scanning skill that lives under the otherwise-committed `.agents/skills`.
 .claude/
 .journal/
 .wt/
+.codex-security/
+.agents/skills/codex-security-scan/
 
 # Environment
 .env

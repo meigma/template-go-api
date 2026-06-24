@@ -692,6 +692,8 @@ The docs workflow builds the MkDocs site on pull requests and deploys `docs/buil
 The scheduled security scan workflow builds the local container image weekly, scans it for high/critical fixed vulnerabilities, and uploads SARIF results to GitHub code scanning.
 Dependabot covers GitHub Actions, Docker base images, the root Go module, and the docs uv project.
 
+The build CLIs are pinned by version through [Proto](https://moonrepo.dev/proto) and their downloads are integrity-verified: golangci-lint, goose, and mockery verify against their publishers' checksum files (`checksum-url`), while sqlc — which publishes no checksums — is verified against a repository-committed per-platform digest (`.moon/proto/sqlc.sha256`) by the `sqlc-verify` task before it runs. Repo-pinning the other three was considered and deliberately left out: they already verify against upstream checksums, so committing per-platform digests would duplicate that control and add maintenance on every version bump.
+
 Repository settings live in `.github/repository-settings.toml`.
 They default to immutable releases, private vulnerability reporting, signed commits, squash-only merges, GitHub Pages workflow publishing, and protected tags.
 
