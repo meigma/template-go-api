@@ -203,3 +203,19 @@ watching — WATCH: this PR touches moon.yml + .sha256 + docs (no .go/migrations
 so confirm affected-gating still runs `sqlc-verify` on linux (.moon/proto/
 sqlc.sha256 is one of its inputs, so it should). Next: merge on green, clean up.
 This is the LAST of the 3 findings.
+
+## 2026-06-24 09:10 — Finding 1/3 merged (PR #15 `f2c5210`) — ALL THREE DONE
+CI green; confirmed affected-gating DID run `sqlc-verify: sqlc binary verified for
+linux_amd64` on `ubuntu-latest` (its input `.moon/proto/sqlc.sha256` triggered it),
+proving the pinned linux hash is correct on the runner. Squash-merged PR #15 →
+`master f2c5210`. Cleanup done: remote branch deleted, worktree removed, local
+branch force-deleted, master fast-forwarded. Invariants OK: only `master` +
+`journal/jmgilman`; `git ls-files .journal` empty.
+
+**All three independent Codex Security findings are remediated and merged:**
+- #1/3 (CWE-494, unverified sqlc download) → PR #15 `f2c5210` (`build(sqlc): …`).
+- #2/3 (CWE-256/522, plaintext API keys) → PR #13 `ff55a2e` (`fix(authz): …`).
+- #3/3 (CWE-400/770, unbounded list) → PR #14 `879e2be` (`feat(todo): …`).
+
+The user's session goal ("address security review findings") is fully met. Session
+still in-progress in INDEX; ready for session-close whenever the user calls it.
