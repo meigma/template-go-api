@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	// stdlib registers the "pgx" database/sql driver. Importing it lets the
 	// testcontainers postgres module take snapshots through pgx instead of the
 	// slower `docker exec psql` fallback.
@@ -79,11 +80,23 @@ func setupPostgres(ctx context.Context, t *testing.T) *fixture {
 func (f *fixture) Reset(ctx context.Context, t *testing.T) *todopostgres.TodoRepository {
 	t.Helper()
 
+	return todopostgres.NewTodoRepository(f.ResetPool(ctx, t))
+}
+
+// ResetPool restores the database to its clean post-migration state and returns
+// a fresh pgx pool bound to it. Restore drops and recreates the target database
+// (WITH FORCE), terminating any existing connections, so the pool must be opened
+// after the restore — hence a new pool per call. The pool is closed via
+// t.Cleanup. The authz suites use it directly to seed api_keys rows and to share
+// the container URL with app.New.
+func (f *fixture) ResetPool(ctx context.Context, t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
 	require.NoError(t, f.container.Restore(ctx))
 
 	pool, err := postgres.Connect(ctx, postgres.Config{URL: f.url})
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	return todopostgres.NewTodoRepository(pool)
+	return pool
 }
