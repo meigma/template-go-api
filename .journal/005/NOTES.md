@@ -503,3 +503,13 @@ mergeable=MERGEABLE, mergeStateStatus=UNSTABLE (checks not done). Watching check
 completion in the background (`gh pr checks 10 --watch`, bg id b3hrna1z4). Will report
 pass/fail. Note: Kusari may flag new transitive CVEs/licenses (it did on PR #6 — x/crypto);
 if it fails, inspect + pin like session 004 did, then re-run. Not merging — user reviews/merges.
+
+## 2026-06-23 19:49 — PR #10 CI GREEN; merge state CLEAN; ready for review
+All checks pass: **ci** ✅ (58s), **GitHub Pages** ✅ (29s), **Kusari Inspector** ✅ (1m10s) —
+no supply-chain blocker this time (cedar-go + cedar-go/types + the apikey deps cleared; the
+feared x/crypto-style transitive CVE did NOT recur). Release/container dry-run jobs skip on
+PRs as expected. `gh pr view 10`: state=OPEN, mergeable=MERGEABLE, **mergeStateStatus=CLEAN**.
+PR is ready for the user's review + squash-merge (their call; the squash commit on master will
+be signed at merge). Authz tier work is functionally DONE pending that merge. After merge:
+session-close (write SUMMARY, flip 005 → complete in INDEX, post-merge branch/worktree cleanup
+per memory `gh-merge-delete-branch-worktree-fails`).
