@@ -174,3 +174,48 @@ reqs) passes under default-on. Docs: README (Rate limiting section + flags),
 DELETE_ME (inventory + seam), router.go stale "rate limiting" seam comment.
 
 Next: worktree off `master`, implement, `root:check` + integration suite, PR.
+
+## 2026-06-24 12:06 — Rate limiting: shipped (PR #17, `867662f`)
+
+**Done.** `feat(api): add per-client IP rate limiting` — **PR #17 squash-merged
+to `master` `867662f`**. Worktree removed, local `master` fast-forwarded, remote
+branch deleted, `.journal` still untracked on `master`.
+
+**The change (new package + wiring, 11 files + 5 new):**
+- New `internal/ratelimit`: `Limiter` port + `Decision` (limiter.go); in-process
+  per-key token-bucket adapter w/ idle-eviction janitor + `Stop()` (memory.go);
+  Huma `Middleware` taking a router-agnostic `KeyFunc`, inert when disabled
+  (middleware.go); unit tests (memory_test.go, middleware_test.go).
+- `internal/adapter/http/ratelimit.go`: `ClientIPKeyFunc` (humachi.Unwrap +
+  chi GetClientIP) — chi-specifics stay in the transport adapter.
+- `router.go`: `RouterDeps.InstallRateLimit` called BEFORE `InstallAuthz`;
+  refreshed the stale "deferred seams" comment.
+- `app.go`: `buildRateLimiter` (nil when disabled) + wired install hook + stored
+  the limiter on `App`; `serve.go`: `stopRateLimiter` deferred in Run (mirrors
+  `closePool`).
+- `config.go` + `config_test.go`: `--rate-limit-enabled` (default true),
+  `--rate-limit-rps` (10), `--rate-limit-burst` (20) + validation + coverage.
+- `app_test.go`: `TestAppWiringRateLimits` — functional proof on the composed
+  handler (burst 1 → 2nd req 429 BEFORE auth, i.e. not 403; /healthz exempt).
+- `authz_e2e_test.go`: disabled rate limiting in `e2eServer` (orthogonal).
+- Docs: README **Rate limiting** section + 3 flags; DELETE_ME inventory + seam.
+- `go.mod`: promoted `golang.org/x/time` to a direct require.
+
+**Verification:** `root:check` green (lint/format/test/openapi-check/sqlc — spec
+UNCHANGED, no per-op 429, as decided); `root:test-integration` green locally
+(`postgres:17-alpine`); CI green (`ci` 1m1s) and confirmed it ran both the
+`ratelimit` unit suite (`ok ... 0.029s`) and `root:test-integration`
+(`internal/integration ok 17.868s`) on `ubuntu-latest`.
+
+**Notes / gotchas:**
+- Huma serializes an empty output struct as **204**, not 200 — the middleware
+  tests assert `StatusNoContent` for allowed requests (initial 200 assert failed).
+- testifylint: float field asserts need `InDelta`/`InEpsilon`, not `Equal`
+  (`RateLimitRPS`). godoclint: stdlib refs in doc comments need `[time.NewTicker]`.
+- With rate-limit default-on, `app.New`-without-`Run` tests leak the janitor
+  goroutine (10-min ticker, harmless; repo has no goleak). Acceptable; documented.
+
+Remaining loose threads (housekeeping, if pursued): session 005 stuck
+`in-progress` in INDEX; untracked local tooling dirs in the main checkout;
+defense-in-depth checksum pinning for the other 3 Proto plugins; OTel tracing
+seam still unbuilt (deferred — user chose rate limiting only).
