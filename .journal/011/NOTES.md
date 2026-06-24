@@ -273,3 +273,52 @@ and a simulated parent span, asserting the recorded span name == OperationID.
 otelpgx DB spans exercised by the integration suite running (not span-asserted).
 
 Next: worktree off `master`, implement, `root:check` + integration suite, PR.
+
+## 2026-06-24 13:05 — OTel tracing: shipped (PR #18, `6625ab1`)
+
+**Done.** `feat(api): add OpenTelemetry tracing (HTTP + DB spans)` — **PR #18
+squash-merged to `master` `6625ab1`**. Worktree removed, local `master`
+fast-forwarded, remote branch deleted, `.journal` untracked on `master`.
+
+**The change (new file + wiring, 11 files):**
+- New `internal/observability/tracing.go`: `TracingConfig` +
+  `NewTracerProvider(ctx,cfg)` (OTLP/HTTP exporter via OTEL_* env, resource w/
+  service.name/version + WithFromEnv override, batching provider, global
+  registration + W3C tracecontext/baggage propagator; returns flush func, or NIL
+  when disabled — caller nil-checks) + `TraceSpanNamer` Huma middleware (renames
+  active otelhttp span → OperationID, adds http.route). `tracing_test.go`.
+- `adapter/http/router.go`: `RouterDeps.Tracing` → wraps mux with
+  `otelhttp.NewHandler(WithFilter(traceableRequest))` (infra routes excluded) +
+  installs span-namer before Register; extracted `pathHealthz/Readyz/Metrics`
+  consts (goconst flagged the 3rd `/healthz`). `router_test.go` tests.
+- `adapter/postgres/postgres.go`: `Config.Tracing` → `ConnConfig.Tracer =
+  otelpgx.NewTracer()` (gated).
+- `app/app.go`: build provider (service name const + version), store shutdown,
+  pass Tracing to NewRouter + postgres.Config; `serve.go`: `shutdownTracing`
+  deferred in Run (fresh grace-bounded ctx — Run's ctx is already cancelled).
+- `config`: `--tracing-enabled` (default FALSE — needs a collector) + test.
+- Docs: README **Tracing** section + flag; DELETE_ME inventory.
+- go.mod: added otelpgx, otlptracehttp; promoted otel/otelhttp/sdk/trace to
+  direct (bumped otel 1.43→1.44 via otlptracehttp).
+
+**Verification:** `root:check` green (openapi-check unchanged — tracing is
+transport/middleware, no spec change); `root:test-integration` green locally;
+CI green (`ci` 1m53s) and ran `root:test-integration` on the runner
+(`internal/integration ok 20.282s`).
+
+**Notes / gotchas:**
+- semconv: otel v1.43/1.44 bundles up to v1.39.0 — used `semconv/v1.39.0`.
+  Resource schema-URL conflict avoided: only `WithTelemetrySDK` carries a schema;
+  `WithAttributes`/`WithFromEnv` are schemaless → no merge conflict.
+- `otlptracehttp.New` connects lazily, so the enabled-provider unit test needs no
+  collector. `otelhttp.NewHandler` captures the global tracer at construction,
+  so an in-memory exporter can't be injected post-`app.New` — span-path coverage
+  is the namer unit test (humatest + tracetest + simulated parent span), not an
+  app-level assertion.
+- nilnil linter: disabled branch `return nil, nil` needs `//nolint:nilnil`
+  (same as resolveAuthenticator).
+
+**ALL THREE feature seams now built** (versioning #16, rate-limiting #17,
+tracing #18). Remaining = housekeeping only: session 005 stuck `in-progress` in
+INDEX; untracked local tooling dirs in main checkout; defense-in-depth checksum
+pinning for the other 3 Proto plugins.
