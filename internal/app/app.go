@@ -13,6 +13,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/time/rate"
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
 	"github.com/meigma/template-go-api/internal/adapter/postgres"
@@ -20,11 +21,16 @@ import (
 	"github.com/meigma/template-go-api/internal/authz/apikey"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
+	"github.com/meigma/template-go-api/internal/ratelimit"
 	"github.com/meigma/template-go-api/internal/todo"
 	todoauthz "github.com/meigma/template-go-api/internal/todo/authz"
 	"github.com/meigma/template-go-api/internal/todo/httpapi"
 	todopostgres "github.com/meigma/template-go-api/internal/todo/postgres"
 )
+
+// rateLimiterIdleTTL is how long an idle per-client bucket is kept before the
+// in-process limiter evicts it, bounding memory under churning client keys.
+const rateLimiterIdleTTL = 10 * time.Minute
 
 // App is a fully wired API server ready to Run.
 type App struct {
@@ -35,6 +41,9 @@ type App struct {
 	// pool is the PostgreSQL connection pool, closed during graceful shutdown.
 	// It is nil when a repository is injected with WithRepository (tests).
 	pool *pgxpool.Pool
+	// rateLimiter is the in-process rate limiter whose janitor goroutine is
+	// stopped during graceful shutdown. It is nil when rate limiting is disabled.
+	rateLimiter *ratelimit.InMemory
 }
 
 // Option configures how New wires the application.
@@ -95,6 +104,8 @@ func New(
 		return nil, err
 	}
 
+	rateLimiter, installRateLimit := buildRateLimiter(cfg, logger)
+
 	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
 	// dedicated metrics server (below) serves it off the API surface.
 	serveMetricsInline := cfg.MetricsAddr == ""
@@ -108,10 +119,11 @@ func New(
 		TrustedProxyHeader:   cfg.TrustedProxyHeader,
 		// The postgres store contributes a real connectivity check here; an
 		// injected repository (tests) contributes none, so /readyz is always ready.
-		Readiness:     readiness,
-		Register:      registerResources(service),
-		InstallAuthz:  installAuthz,
-		FinalizeAuthz: finalizeAuthz,
+		Readiness:        readiness,
+		Register:         registerResources(service),
+		InstallRateLimit: installRateLimit,
+		InstallAuthz:     installAuthz,
+		FinalizeAuthz:    finalizeAuthz,
 	})
 
 	server := &http.Server{
@@ -141,6 +153,7 @@ func New(
 		logger:        logger,
 		grace:         cfg.ShutdownGrace,
 		pool:          pool,
+		rateLimiter:   rateLimiter,
 	}, nil
 }
 
@@ -238,6 +251,25 @@ func resolveAuthenticator(
 	}
 
 	return apikey.NewAuthenticator(apikey.NewStore(pool)), nil
+}
+
+// buildRateLimiter constructs the rate limiter and the hook that installs the
+// rate-limit middleware on the API. When rate limiting is disabled it returns a
+// nil limiter and a nil hook, so NewRouter leaves the API unthrottled. The
+// limiter is keyed by client IP (adapterhttp.ClientIPKeyFunc); swap that key
+// function for a principal-based one to limit authenticated callers instead.
+// The returned limiter runs a janitor goroutine the App stops on shutdown.
+func buildRateLimiter(cfg config.Config, logger *slog.Logger) (*ratelimit.InMemory, func(huma.API)) {
+	if !cfg.RateLimitEnabled {
+		return nil, nil
+	}
+
+	limiter := ratelimit.NewInMemory(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst, rateLimiterIdleTTL)
+	install := func(api huma.API) {
+		ratelimit.NewMiddleware(api, limiter, adapterhttp.ClientIPKeyFunc, logger, true).Install()
+	}
+
+	return limiter, install
 }
 
 // Handler returns the assembled HTTP handler, primarily for functional tests.

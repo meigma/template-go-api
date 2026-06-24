@@ -97,3 +97,48 @@ func TestAppWiringDeniesUnauthorized(t *testing.T) {
 	application.Handler().ServeHTTP(createRec, createReq)
 	assert.Equal(t, http.StatusForbidden, createRec.Code)
 }
+
+// TestAppWiringRateLimits proves the rate-limit middleware is wired into the
+// composed server, runs before authentication, and exempts the infrastructure
+// routes. With a burst of one, the second API request from the same client is
+// throttled — and it returns 429, not the 403 a denied caller would get, which
+// shows the limiter runs before authorization. The /healthz route is never
+// limited because the infra routes bypass Huma.
+func TestAppWiringRateLimits(t *testing.T) {
+	t.Parallel()
+
+	vp := viper.New()
+	vp.Set("rate-limit-rps", 1)
+	vp.Set("rate-limit-burst", 1)
+	cfg := config.Load(vp)
+	logger := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	application, err := app.New(
+		context.Background(), cfg, logger, "test",
+		app.WithRepository(todotest.NewRepository()),
+		app.WithAuthenticator(stubAuthenticator{roles: []string{"user"}}),
+	)
+	require.NoError(t, err)
+	handler := application.Handler()
+
+	// Infra routes bypass Huma, so they are never rate limited: repeated /healthz
+	// hits all succeed despite the burst of one.
+	for range 3 {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	post := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/todos", strings.NewReader(`{"title":"x"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		return rec.Code
+	}
+
+	// The single burst token lets the first request through; the next request
+	// from the same client is throttled before authorization runs.
+	assert.Equal(t, http.StatusCreated, post())
+	assert.Equal(t, http.StatusTooManyRequests, post())
+}

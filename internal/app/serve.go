@@ -31,6 +31,8 @@ func (a *App) Run(ctx context.Context) error {
 	// Close the database pool (when postgres) on every exit path, after the
 	// servers have returned — including when a server fails to start.
 	defer a.closePool(ctx)
+	// Stop the in-process rate limiter's janitor goroutine on every exit path.
+	defer a.stopRateLimiter(ctx)
 
 	servers := a.servers()
 	serveErr := make(chan error, len(servers))
@@ -90,4 +92,16 @@ func (a *App) closePool(ctx context.Context) {
 
 	a.logger.InfoContext(ctx, "closing database pool")
 	a.pool.Close()
+}
+
+// stopRateLimiter stops the in-process rate limiter's janitor goroutine when one
+// is configured. It is deferred in Run so it executes on every exit path. It is
+// a no-op when rate limiting is disabled (no limiter was built).
+func (a *App) stopRateLimiter(ctx context.Context) {
+	if a.rateLimiter == nil {
+		return
+	}
+
+	a.logger.InfoContext(ctx, "stopping rate limiter")
+	a.rateLimiter.Stop()
 }

@@ -26,6 +26,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Zero(t, cfg.DBMaxConns)
 	assert.True(t, cfg.AuthzEnabled, "authz is enabled by default now that the routes are tagged")
 	assert.Empty(t, cfg.AuthzPolicyDir)
+	assert.True(t, cfg.RateLimitEnabled, "rate limiting is enabled by default")
+	assert.InDelta(t, defaultRateLimitRPS, cfg.RateLimitRPS, 0.0001)
+	assert.Equal(t, defaultRateLimitBurst, cfg.RateLimitBurst)
 }
 
 func TestLoadAuthzFromFlags(t *testing.T) {
@@ -105,4 +108,26 @@ func TestValidate(t *testing.T) {
 	missingDatabaseURL := base
 	missingDatabaseURL.DatabaseURL = ""
 	require.Error(t, missingDatabaseURL.Validate())
+
+	// Rate-limit settings are validated only when rate limiting is enabled.
+	rateLimited := base
+	rateLimited.RateLimitEnabled = true
+	rateLimited.RateLimitRPS = 10
+	rateLimited.RateLimitBurst = 20
+	require.NoError(t, rateLimited.Validate())
+
+	zeroRPS := rateLimited
+	zeroRPS.RateLimitRPS = 0
+	require.Error(t, zeroRPS.Validate())
+
+	zeroBurst := rateLimited
+	zeroBurst.RateLimitBurst = 0
+	require.Error(t, zeroBurst.Validate())
+
+	// With rate limiting disabled, non-positive values are ignored.
+	disabledIgnoresValues := base
+	disabledIgnoresValues.RateLimitEnabled = false
+	disabledIgnoresValues.RateLimitRPS = 0
+	disabledIgnoresValues.RateLimitBurst = 0
+	require.NoError(t, disabledIgnoresValues.Validate())
 }
