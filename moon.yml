@@ -108,11 +108,58 @@ tasks:
     options:
       cache: false
 
+  # Supply-chain guard: verify the resolved sqlc binary against the repository's
+  # pinned per-platform digest (.moon/proto/sqlc.sha256) BEFORE any sqlc task runs.
+  # sqlc publishes no upstream checksum or signature, so its Proto plugin cannot
+  # use checksum-url the way goose/mockery/golangci-lint do; this is the
+  # repo-provided expected digest, checked before execution (CWE-494). It installs
+  # and locates the binary WITHOUT executing sqlc, and fails closed on a platform
+  # that has no pinned digest.
+  sqlc-verify:
+    script: |
+      set -eu
+      proto install sqlc >/dev/null
+      bin="$(proto bin sqlc)"
+      case "$(uname -s)" in
+        Darwin) os=darwin ;;
+        Linux)  os=linux ;;
+        *) echo "sqlc-verify: unsupported OS '$(uname -s)'; add its sqlc digest to .moon/proto/sqlc.sha256" >&2; exit 1 ;;
+      esac
+      case "$(uname -m)" in
+        arm64|aarch64) arch=arm64 ;;
+        x86_64|amd64)  arch=amd64 ;;
+        *) echo "sqlc-verify: unsupported arch '$(uname -m)'; add its sqlc digest to .moon/proto/sqlc.sha256" >&2; exit 1 ;;
+      esac
+      want="$(awk -v k="${os}_${arch}" '$1==k {print $2}' .moon/proto/sqlc.sha256)"
+      [ -n "$want" ] || { echo "sqlc-verify: no pinned digest for ${os}_${arch} in .moon/proto/sqlc.sha256" >&2; exit 1; }
+      if command -v sha256sum >/dev/null 2>&1; then
+        got="$(sha256sum "$bin" | cut -d' ' -f1)"
+      else
+        got="$(shasum -a 256 "$bin" | cut -d' ' -f1)"
+      fi
+      if [ "$got" != "$want" ]; then
+        echo "sqlc-verify: sqlc binary digest mismatch for ${os}_${arch}" >&2
+        echo "  expected $want" >&2
+        echo "  got      $got" >&2
+        echo "  (binary: $bin)" >&2
+        exit 1
+      fi
+      echo "sqlc-verify: sqlc binary verified for ${os}_${arch}"
+    toolchains: ['go']
+    inputs:
+      - '.prototools'
+      - '.moon/proto/sqlc.toml'
+      - '.moon/proto/sqlc.sha256'
+    options:
+      cache: false
+
   # Regenerate the committed sqlc layer from the schema and queries. Run after
   # changing migrations/*.sql or queries/*.sql, then commit the result.
   sqlc:
     command: 'proto run sqlc -- generate'
     toolchains: ['go']
+    deps:
+      - 'root:sqlc-verify'
     inputs:
       - '@group(sqlcSources)'
     outputs:
@@ -135,6 +182,8 @@ tasks:
       proto run sqlc -- generate -f "$cfg"
       git diff --no-index --exit-code -- internal/todo/postgres/sqlc "$tmp"
     toolchains: ['go']
+    deps:
+      - 'root:sqlc-verify'
     inputs:
       - '@group(sqlcSources)'
       - 'internal/todo/postgres/sqlc/*.go'
@@ -221,6 +270,7 @@ tasks:
       - 'root:build'
       - 'root:test'
       - 'root:openapi-check'
+      - 'root:sqlc-verify'
       - 'root:sqlc-check'
       - 'root:mockery-check'
       - 'docs:build'
