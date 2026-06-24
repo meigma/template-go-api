@@ -53,8 +53,11 @@ moon run root:build
 ```
 
 Running the binary directly applies the schema but not the `hack/sql/` seeds, so
-the `api_keys` table starts empty. Insert a key yourself, or set
-`TEMPLATE_GO_API_AUTHZ_ENABLED=false` to bypass authorization while developing.
+the `api_keys` table starts empty. Insert a key yourself — the table stores a
+SHA-256 hash, so write the digest into `key_hash`, e.g.
+`INSERT INTO api_keys (key_hash, subject, roles) VALUES (encode(sha256('my-key'::bytea), 'hex'), 'me', ARRAY['user'])`
+— or set `TEMPLATE_GO_API_AUTHZ_ENABLED=false` to bypass authorization while
+developing.
 
 See the [README](https://github.com/meigma/template-go-api#readme) for the full
 quickstart, configuration reference, the
