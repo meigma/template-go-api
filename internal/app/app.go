@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
 	"github.com/meigma/template-go-api/internal/adapter/postgres"
+	"github.com/meigma/template-go-api/internal/authz"
+	"github.com/meigma/template-go-api/internal/authz/apikey"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
@@ -74,6 +77,11 @@ func New(
 	service := todo.NewService(repo, logger)
 	metrics := observability.NewMetrics()
 
+	installAuthz, err := authzInstaller(cfg, pool, logger)
+	if err != nil {
+		return nil, err
+	}
+
 	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
 	// dedicated metrics server (below) serves it off the API surface.
 	serveMetricsInline := cfg.MetricsAddr == ""
@@ -87,8 +95,9 @@ func New(
 		TrustedProxyHeader:   cfg.TrustedProxyHeader,
 		// The postgres store contributes a real connectivity check here; an
 		// injected repository (tests) contributes none, so /readyz is always ready.
-		Readiness: readiness,
-		Register:  registerResources(service),
+		Readiness:    readiness,
+		Register:     registerResources(service),
+		InstallAuthz: installAuthz,
 	})
 
 	server := &http.Server{
@@ -143,6 +152,40 @@ func resolveStore(
 	readiness := []adapterhttp.ReadinessCheck{{Name: "postgres", Check: repo.Ping}}
 
 	return repo, pool, readiness, nil
+}
+
+// authzInstaller builds the authorization engine and returns a hook that
+// installs the authn/authz Huma middleware on the API. The Authorizer is built
+// from an empty contribution set (only the base cross-cutting policies) this
+// phase; a later phase passes each domain slice's Contribution. The API-key
+// authenticator is PostgreSQL-backed, so it requires a pool when authorization
+// is enabled. The middleware is inert when cfg.AuthzEnabled is false, which is
+// the default until routes are tagged — keeping every untagged route working.
+func authzInstaller(
+	cfg config.Config,
+	pool *pgxpool.Pool,
+	logger *slog.Logger,
+) (func(huma.API), error) {
+	authorizer, err := authz.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("build authorizer: %w", err)
+	}
+
+	// The authenticator resolves keys from PostgreSQL. When authorization is
+	// enabled it needs a pool (an injected-repository wiring has none); when
+	// disabled the middleware never runs, so a nil store is harmless.
+	if cfg.AuthzEnabled && pool == nil {
+		return nil, errors.New("authz-enabled requires a database connection for the api-key store")
+	}
+
+	var authenticator authz.Authenticator
+	if pool != nil {
+		authenticator = apikey.NewAuthenticator(apikey.NewStore(pool))
+	}
+
+	return func(api huma.API) {
+		authz.NewMiddleware(api, authenticator, authorizer, logger, cfg.AuthzEnabled).Install()
+	}, nil
 }
 
 // Handler returns the assembled HTTP handler, primarily for functional tests.

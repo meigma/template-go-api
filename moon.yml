@@ -31,6 +31,9 @@ fileGroups:
   mockerySources:
     - '.mockery.yaml'
     - 'internal/todo/ports.go'
+    - 'internal/authz/authn.go'
+    - 'internal/authz/contribution.go'
+    - 'internal/authz/apikey/apikey.go'
     - '.prototools'
     - '.moon/proto/mockery.toml'
   lintConfig:
@@ -147,6 +150,8 @@ tasks:
       - '@group(mockerySources)'
     outputs:
       - 'internal/todo/mocks/*.go'
+      - 'internal/authz/mocks/*.go'
+      - 'internal/authz/apikey/mocks/*.go'
     options:
       cache: false
 
@@ -161,13 +166,22 @@ tasks:
       tmp="$(mktemp -d "${PWD}/.mockery-check.XXXXXX")"
       cfg="${tmp}.yaml"
       trap 'rm -rf "$tmp" "$cfg"' EXIT
+      # Regenerate every mock into one throwaway directory (filenames are unique
+      # across the mocked interfaces), then compare each committed mocks package
+      # against the freshly generated files of the same name.
       sed "s|dir: \"{{.InterfaceDir}}/mocks\"|dir: ${tmp#"${PWD}/"}|" .mockery.yaml > "$cfg"
       proto run mockery -- --config "$cfg"
-      git diff --no-index --exit-code -- internal/todo/mocks "$tmp"
+      for dir in internal/todo/mocks internal/authz/mocks internal/authz/apikey/mocks; do
+        for committed in "$dir"/*.go; do
+          git diff --no-index --exit-code -- "$committed" "$tmp/$(basename "$committed")"
+        done
+      done
     toolchains: ['go']
     inputs:
       - '@group(mockerySources)'
       - 'internal/todo/mocks/*.go'
+      - 'internal/authz/mocks/*.go'
+      - 'internal/authz/apikey/mocks/*.go'
     options:
       cache: false
 

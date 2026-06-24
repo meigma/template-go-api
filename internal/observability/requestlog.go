@@ -31,6 +31,11 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
 
+			// The access log records request metadata only — never request
+			// headers or bodies. Credential-bearing headers (Authorization,
+			// X-API-Key) are therefore redacted by construction: they are never
+			// read here. Keep it that way when extending this line, so API keys
+			// and bearer tokens cannot leak into logs.
 			logger.LogAttrs(ctx, slog.LevelInfo, "http request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),

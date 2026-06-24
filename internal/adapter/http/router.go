@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
@@ -38,6 +39,11 @@ type RouterDeps struct {
 	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
 	Register Registrar
+	// InstallAuthz installs the authentication/authorization Huma middleware on
+	// the API. It runs after the resource operations are registered. Nil (or a
+	// disabled middleware) leaves the API unauthenticated, which is the default
+	// until routes are tagged.
+	InstallAuthz func(huma.API)
 }
 
 // NewRouter assembles the chi router: the core middleware stack, RFC 9457 error
@@ -81,6 +87,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	api := NewAPI(mux, deps.Version)
 	if deps.Register != nil {
 		deps.Register(api)
+	}
+	// The authn/authz Huma middleware is installed after registration; it
+	// enforces per-operation declarations at request time, so registration order
+	// is irrelevant. It is a no-op when authorization is disabled.
+	if deps.InstallAuthz != nil {
+		deps.InstallAuthz(api)
 	}
 
 	// Infrastructure routes stay raw chi and are excluded from the spec.

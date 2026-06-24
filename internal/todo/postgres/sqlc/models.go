@@ -10,6 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type ApiKey struct {
+	Key     string
+	Subject string
+	Roles   []string
+}
+
 type Todo struct {
 	ID          uuid.UUID
 	Title       string
