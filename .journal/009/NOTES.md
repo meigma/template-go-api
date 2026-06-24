@@ -108,3 +108,16 @@ suite runs in CI and is proven on ubuntu-latest. Template is in good shape for i
 change (like the runInCI flip itself) triggers nothing, so enabling a CI task isn't
 self-proving; you need a PR that touches the task's inputs to exercise it on the runner.
 Session work complete; ready for session-close when the user is.
+
+## 2026-06-23 21:34 — Close
+Session 009 closed. Both PRs merged and squashed to `master` (`598d130`):
+- PR #11 `test(ci): run the container-backed integration suite in CI` (`c9a6bbf`).
+- PR #12 `docs: fix first-run commands and document resource/agent wiring` (`598d130`).
+All 8 first-time-integrator review findings resolved; the container-backed
+integration suite runs in CI and was proven on `ubuntu-latest`. Local `master`
+fast-forwarded to `598d130`; both implementation worktrees removed (only `master`
++ `journal/jmgilman` remain). `SUMMARY.md` written; `INDEX.md` row → complete;
+`TECH_NOTES.md` updated (CI integration-suite enablement + the `moon ci`
+affected-gating gotcha). Handoff: template is in good shape for inheritance.
+Only loose end is the now-untracked local `.agents/skills/codex-security-scan/`
+surfaced by the `.gitignore` fix — local artifact, not template work.
