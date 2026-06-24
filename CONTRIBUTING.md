@@ -42,9 +42,13 @@ moon run root:build
 moon run root:test
 moon run docs:build              # build the docs site (renders the OpenAPI spec)
 
-./bin/template-go-api serve      # run the API server (after root:build)
-curl -sS localhost:8080/healthz  # smoke-test a running server
+docker compose up --build        # run the full API + PostgreSQL stack (Ctrl-C to stop)
+curl -sS localhost:8080/healthz  # smoke-test the running server (in another shell)
 ```
+
+The bare `./bin/template-go-api serve` needs a PostgreSQL database
+(`--database-url` is required); the Compose stack above wires one up. To run the
+binary against your own database, see the README's "Running with PostgreSQL".
 
 ## Release Changes
 

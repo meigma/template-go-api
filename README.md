@@ -378,7 +378,7 @@ contributes three things via an `authz.Contribution`:
 - **Policies** — embedded `policy.cedar` source (merged with `base.cedar` and
   every other slice's policies into one Cedar `PolicySet`).
 - **Actions** — typed Cedar action identifiers (`todoauthz.ActionCreate`,
-  `ActionRead`, `ActionUpdate`, `ActionDelete`, `ActionList`), each of the form
+  `ActionRead`, `ActionUpdate`, `ActionList`), each of the form
   `Action::"todo:<verb>"`.
 - **A fact resolver** — maps a `Todo` entity to its Cedar attributes/parents,
   loaded **lazily** (only when a policy dereferences a todo, which the shipped
@@ -487,7 +487,7 @@ Each resource owns its code under `internal/<resource>/`: the domain core at the
 package root, with its adapters nested beneath it.
 
 1. Add a domain package `internal/<resource>` (entity + `Repository` port + `Service`), mirroring `internal/todo`.
-2. Implement the port in a nested adapter — mirror `internal/todo/postgres` for a PostgreSQL-backed datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
+2. Implement the port in a nested adapter — mirror `internal/todo/postgres` for a PostgreSQL-backed datastore (see [Persistence](#persistence) for the sqlc/goose workflow). sqlc generates one package per `sql:` block, so add a second `sql:` entry in `sqlc.yaml` for the new resource and update the literal paths in the `sqlc-check`, `mockery`, and `mockery-check` tasks (`moon.yml`) so the new generated/mocked packages stay drift-guarded.
 3. Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
 4. Add an authz slice `internal/<resource>/authz` (policies, actions, fact resolver) and tag the `httpapi` operations with `authz.Require`/`authz.Public`, then merge its `Contribution` in `internal/app/app.go`. See [Authorization](#authorization) — deny-by-default means an untagged operation is rejected.
 5. Add one `Register` call in `registerResources` in `internal/app/app.go`.
@@ -497,7 +497,7 @@ Shared, cross-domain infrastructure needs no changes: the generic transport in
 `internal/adapter/postgres`. Because each resource's `postgres` package shares its
 name with that shared infra (and, across resources, with each other), import the
 per-resource adapters with aliases in `app.go` — as the `todopostgres` import
-already shows. After changing the API, run `moon run openapi` to refresh the
+already shows. After changing the API, run `moon run root:openapi` to refresh the
 committed spec (CI fails if it drifts). If you back the resource with PostgreSQL,
 also add its readiness check to the `Readiness` slice in `internal/app/app.go` so
 `/readyz` reflects it.
@@ -544,8 +544,16 @@ non-root distroless runtime image. The default entrypoint runs the server:
 ```sh
 docker build --target test .
 docker build -t template-go-api:dev .
-docker run --rm -p 8080:8080 template-go-api:dev
+docker run --rm -p 8080:8080 \
+  -e TEMPLATE_GO_API_DATABASE_URL='postgres://<user>:<password>@host.docker.internal:5432/<db>' \
+  template-go-api:dev
 ```
+
+The server requires a database, so pass `TEMPLATE_GO_API_DATABASE_URL` pointing at
+a PostgreSQL reachable from inside the container — on Docker Desktop,
+`host.docker.internal` resolves to a database running on the host (see
+[Running with PostgreSQL](#running-with-postgresql)). For a fully wired
+API + PostgreSQL run, use the Compose stack instead.
 
 The Dockerfile pins the builder and runtime images by digest and verifies that
 the selected Go builder image matches `.go-version`. When bumping Go, update

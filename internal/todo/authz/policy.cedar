@@ -15,7 +15,6 @@ permit (
         Action::"todo:create",
         Action::"todo:read",
         Action::"todo:update",
-        Action::"todo:delete",
         Action::"todo:list"
     ],
     resource

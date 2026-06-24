@@ -84,13 +84,13 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    The `todo` resource is a reference slice that demonstrates the hexagonal seams, not a product feature. To make it your own:
 
    - Add a domain package `internal/<resource>` (entity, `Repository` port, and `Service`), mirroring `internal/todo`. Each resource owns its adapters nested beneath it (`internal/<resource>/{httpapi,postgres}`).
-   - Implement the port in a nested adapter: mirror `internal/todo/postgres` (pgx + sqlc, on the shared pool/migrations in `internal/adapter/postgres`). The README's [Persistence](README.md#persistence) section covers the migration and sqlc-regeneration workflow.
+   - Implement the port in a nested adapter: mirror `internal/todo/postgres` (pgx + sqlc, on the shared pool/migrations in `internal/adapter/postgres`). The README's [Persistence](README.md#persistence) section covers the migration and sqlc-regeneration workflow. sqlc generates one package per `sql:` block, so add a second `sql:` entry in `sqlc.yaml` for the new resource and update the literal paths in the `sqlc-check`, `mockery`, and `mockery-check` tasks (`moon.yml`) so the new generated/mocked packages stay drift-guarded.
    - Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
    - Add an authz slice `internal/<resource>/authz` (policies, actions, fact resolver), tag the `httpapi` operations with `authz.Require`/`authz.Public`, and merge its `Contribution` into `authz.New` in `internal/app/app.go`, mirroring `internal/todo/authz`. Authorization is deny-by-default, so an untagged operation is rejected (see the README's [Authorization](README.md#authorization) section). If you are dropping authorization, see step 6.
    - Add one `Register` call in `registerResources` in `internal/app/app.go`.
    - When you wire a real datastore, add a readiness check to the `Readiness` slice in `internal/app/app.go` so `/readyz` reflects it (the PostgreSQL adapter shows the pattern with its `Ping` check).
-   - Put cross-package integration tests in `internal/integration` (package `integration`, `//go:build integration`), run via `moon run test-integration`; keep fast unit tests beside the code they cover. Repository doubles come from the mockery-generated mocks in `internal/<resource>/mocks` (register the new port in `.mockery.yaml`); a stateful in-memory fake for end-to-end tests lives in `internal/todo/todotest`. The README's [Testing](README.md#testing) section covers the split.
-   - Run `moon run openapi` to refresh `docs/docs/openapi.yaml` after changing the API, `moon run sqlc` after changing PostgreSQL migrations or queries, and `moon run mockery` after changing a mocked port (then commit each); all three CI drift-guards fail if the committed output is stale.
+   - Put cross-package integration tests in `internal/integration` (package `integration`, `//go:build integration`), run via `moon run root:test-integration`; keep fast unit tests beside the code they cover. Repository doubles come from the mockery-generated mocks in `internal/<resource>/mocks` (register the new port in `.mockery.yaml`); a stateful in-memory fake for end-to-end tests lives in `internal/todo/todotest`. The README's [Testing](README.md#testing) section covers the split.
+   - Run `moon run root:openapi` to refresh `docs/docs/openapi.yaml` after changing the API, `moon run root:sqlc` after changing PostgreSQL migrations or queries, and `moon run root:mockery` after changing a mocked port (then commit each); all three CI drift-guards fail if the committed output is stale.
 
    If your project never needs SQL persistence, replace `internal/todo/postgres` with your own `todo.Repository` adapter (the port stays), and you can delete the shared `internal/adapter/postgres`, `internal/integration`, `sqlc.yaml`, the `sqlc`/`sqlc-check`/`migrate`/`test-integration` Moon tasks, the `migrate` subcommand, the `--database-url`/`--db-max-conns` config flags, the `.moon/proto/{sqlc,goose}.toml` plugins and their `.prototools` pins, the `run.build-tags` entry in `.golangci.yml`, and the pgx/goose/testcontainers Go dependencies, then run `go mod tidy` (sqlc and the goose CLI are Proto plugins, not Go modules).
 
@@ -171,7 +171,11 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    - Review `CONTRIBUTING.md` and `SECURITY.md`.
    - Add a real license before publishing the repository.
 
-11. Delete this file:
+11. Decide on the agent-session tooling.
+
+   The template ships Meigma's agent-session protocol as committed content: `.session.md`, `AGENTS.md` (with `CLAUDE.md` symlinked to it), the repo-local skills under `.agents/skills/`, and the journal seed under `scaffold/.journal/`. It is part of the standard Meigma workflow — keep it as-is if your project uses agent sessions. If it does not, remove these together: `AGENTS.md`/`CLAUDE.md` route agents into `.session.md`, and `CLAUDE.md` hard-fails when `.session.md` is absent, so do not delete one without the others.
+
+12. Delete this file:
 
    ```sh
    rm DELETE_ME.md
