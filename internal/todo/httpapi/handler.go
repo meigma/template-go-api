@@ -10,8 +10,15 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/meigma/template-go-api/internal/authz"
 	"github.com/meigma/template-go-api/internal/todo"
+	todoauthz "github.com/meigma/template-go-api/internal/todo/authz"
 )
+
+// todoIDParam is the path parameter naming the todo id. The by-id operations
+// bind it so the authz middleware sets Resource = Todo::"<id>" straight from the
+// matched route, enabling instance-level policies with no load.
+const todoIDParam = "id"
 
 // tagTodos groups the todo operations in the OpenAPI document.
 const tagTodos = "Todos"
@@ -33,6 +40,8 @@ func Register(api huma.API, service *todo.Service) {
 		Summary:       "Create a todo",
 		Tags:          []string{tagTodos},
 		DefaultStatus: http.StatusCreated,
+		// Collection operation: the resource is type-level (Todo), so no id is bound.
+		Metadata: authz.Require(todoauthz.ActionCreate),
 	}, h.create)
 
 	huma.Register(api, huma.Operation{
@@ -41,6 +50,7 @@ func Register(api huma.API, service *todo.Service) {
 		Path:        "/todos",
 		Summary:     "List todos",
 		Tags:        []string{tagTodos},
+		Metadata:    authz.Require(todoauthz.ActionList),
 	}, h.list)
 
 	huma.Register(api, huma.Operation{
@@ -50,6 +60,8 @@ func Register(api huma.API, service *todo.Service) {
 		Summary:     "Get a todo by id",
 		Tags:        []string{tagTodos},
 		Errors:      []int{http.StatusNotFound},
+		// Item operation: bind the {id} path param so Resource = Todo::"<id>".
+		Metadata: authz.Require(todoauthz.ActionRead, todoIDParam),
 	}, h.get)
 
 	huma.Register(api, huma.Operation{
@@ -59,6 +71,9 @@ func Register(api huma.API, service *todo.Service) {
 		Summary:     "Mark a todo as completed",
 		Tags:        []string{tagTodos},
 		Errors:      []int{http.StatusNotFound},
+		// Completing a todo mutates it, so it requires the update action; the
+		// {id} path param binds the instance resource.
+		Metadata: authz.Require(todoauthz.ActionUpdate, todoIDParam),
 	}, h.complete)
 }
 

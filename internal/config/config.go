@@ -24,11 +24,12 @@ const (
 	defaultLogLevel          = "info"
 	defaultLogFormat         = "json"
 	defaultDBMaxConns        = 0
-	// defaultAuthzEnabled is false: the engine ships with an empty contribution
-	// set and a deny-by-default posture, so enabling it before routes carry an
-	// authorization declaration would reject every untagged operation. Operators
-	// enable it once their routes declare Require/Public.
-	defaultAuthzEnabled = false
+	// defaultAuthzEnabled is true: the todo routes now carry their authorization
+	// declarations and the engine merges the base policies with each slice's
+	// Contribution, so the deny-by-default middleware protects the API out of the
+	// box. Operators set it false as an escape hatch to bypass authorization
+	// entirely (incremental adoption or local debugging).
+	defaultAuthzEnabled = true
 )
 
 // Config holds runtime settings for the API server.
@@ -67,10 +68,11 @@ type Config struct {
 	// DBMaxConns caps the PostgreSQL connection pool size. Zero leaves the
 	// driver default in place.
 	DBMaxConns int32
-	// AuthzEnabled is the authorization master switch. When false the authz
-	// middleware is inert (pass-through), the escape hatch for incremental
-	// adoption. It defaults to false: until routes carry an authorization
-	// declaration, deny-by-default would otherwise reject them all.
+	// AuthzEnabled is the authorization master switch. It defaults to true now
+	// that the routes carry their authorization declarations: the deny-by-default
+	// middleware protects the API out of the box. When false the authz middleware
+	// is inert (pass-through), the escape hatch for incremental adoption or local
+	// debugging.
 	AuthzEnabled bool
 	// AuthzPolicyDir optionally loads .cedar policy files from a directory
 	// instead of the embedded set. Empty (the default) uses the embedded

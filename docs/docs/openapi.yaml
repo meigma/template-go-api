@@ -122,6 +122,12 @@ components:
         - status
         - createdAt
       type: object
+  securitySchemes:
+    apiKey:
+      description: "API key supplied via the X-API-Key header or an Authorization: Bearer credential."
+      in: header
+      name: X-API-Key
+      type: apiKey
 info:
   title: template-go-api
   version: dev
@@ -143,6 +149,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
+      security:
+        - apiKey: []
       summary: List todos
       tags:
         - Todos
@@ -167,6 +175,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
+      security:
+        - apiKey: []
       summary: Create a todo
       tags:
         - Todos
@@ -207,6 +217,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
+      security:
+        - apiKey: []
       summary: Get a todo by id
       tags:
         - Todos
@@ -247,6 +259,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
+      security:
+        - apiKey: []
       summary: Mark a todo as completed
       tags:
         - Todos

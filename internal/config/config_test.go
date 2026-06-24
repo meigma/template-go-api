@@ -24,7 +24,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Empty(t, cfg.TrustedProxyHeader)
 	assert.Empty(t, cfg.DatabaseURL)
 	assert.Zero(t, cfg.DBMaxConns)
-	assert.False(t, cfg.AuthzEnabled, "authz is disabled by default until routes are tagged")
+	assert.True(t, cfg.AuthzEnabled, "authz is enabled by default now that the routes are tagged")
 	assert.Empty(t, cfg.AuthzPolicyDir)
 }
 
