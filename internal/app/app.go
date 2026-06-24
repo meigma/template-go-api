@@ -280,11 +280,29 @@ func (noopRepository) List(_ context.Context, _ todo.PageQuery) (todo.PageResult
 	return todo.PageResult{}, nil
 }
 
-// registerResources composes the per-resource HTTP adapters mounted on the API.
+// apiVersionV1 is the URL path prefix for version 1 of the resource API. Every
+// resource operation is mounted beneath it (so the version is explicit in the
+// URL and the OpenAPI paths); the infrastructure routes (/healthz, /readyz,
+// /metrics, and the OpenAPI/docs endpoints) are operational, not part of the
+// versioned API contract, so they stay unprefixed at the root.
+const apiVersionV1 = "/v1"
+
+// registerResources composes the per-resource HTTP adapters mounted on the API,
+// grouped under the current API version prefix.
+//
 // Add a new resource by constructing its service above and adding one Register
-// call here.
+// call here, onto the same version group.
+//
+// Introduce a breaking revision by adding a sibling group — v2 :=
+// huma.NewGroup(api, "/v2") — and registering the changed resources on it;
+// unchanged resources keep registering on v1. Both versions then serve side by
+// side and share the one OpenAPI document. huma.NewGroup returns a huma.API, so
+// a resource's Register call is identical whether it mounts on a version group
+// or the root API, and the authz middleware installed on the root API (before
+// this runs) is inherited by every grouped route.
 func registerResources(todoService *todo.Service) adapterhttp.Registrar {
 	return func(api huma.API) {
-		httpapi.Register(api, todoService)
+		v1 := huma.NewGroup(api, apiVersionV1)
+		httpapi.Register(v1, todoService)
 	}
 }

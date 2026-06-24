@@ -25,7 +25,7 @@ func TestOpenAPICommandWritesFile(t *testing.T) {
 
 	content := string(data)
 	assert.Contains(t, content, "openapi: 3.0")
-	assert.Contains(t, content, "/todos")
+	assert.Contains(t, content, "/v1/todos")
 	assert.Contains(t, content, "1.2.3")
 }
 
