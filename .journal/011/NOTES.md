@@ -219,3 +219,57 @@ Remaining loose threads (housekeeping, if pursued): session 005 stuck
 `in-progress` in INDEX; untracked local tooling dirs in the main checkout;
 defense-in-depth checksum pinning for the other 3 Proto plugins; OTel tracing
 seam still unbuilt (deferred — user chose rate limiting only).
+
+## 2026-06-24 12:50 — OTel tracing: decision + plan
+
+Next thread (user-chosen): **build OTel tracing**.
+
+**Design decisions (user-confirmed via AskUserQuestion):**
+- **Config: standard `OTEL_*` env + a `--tracing-enabled` master switch** (over
+  bespoke `TEMPLATE_GO_API_*` exporter flags). One flag; exporter endpoint/
+  headers/sampler/resource come from the OTEL_* env the SDK reads natively.
+- **Depth: HTTP + DB spans** (over HTTP-only / +demo Collector). otelhttp server
+  spans + otelpgx DB spans; no Collector in compose this pass.
+- **Default OFF** (my call, stated): tracing needs an external collector;
+  on-by-default with no endpoint would spam connection errors. Differs from
+  authz/rate-limit on-by-default, deliberately.
+
+**Grounding (module graph + context7 OTel Go):** otel v1.43.0, otel/sdk,
+otel/trace, and `contrib/.../otelhttp v0.68.0` are ALREADY in the graph
+(transitive). Need to add: otlptracehttp exporter, semconv, and
+`github.com/exaring/otelpgx` (DB tracer). Canonical bootstrap: `otlptracehttp.New(ctx)`
+(reads OTEL_EXPORTER_OTLP_ENDPOINT etc.) → `resource.New` (service.name/version,
+WithFromEnv last so OTEL_SERVICE_NAME/OTEL_RESOURCE_ATTRIBUTES override defaults)
+→ `trace.NewTracerProvider(WithBatcher, WithResource)` → `otel.SetTracerProvider`
++ W3C tracecontext/baggage propagator → `Shutdown` flushes.
+
+**Implementation:**
+- `internal/observability/tracing.go`: `TracingConfig{Enabled, ServiceName,
+  ServiceVersion}` + `NewTracerProvider(ctx, cfg) (shutdown func(context.Context)
+  error, err error)` — disabled ⇒ no-op shutdown, no global set (global stays
+  no-op, so otelhttp/otelpgx are cheap no-ops). Also a span-namer Huma middleware
+  that renames the active (otelhttp) server span to `ctx.Operation().OperationID`
+  + adds the route attr (low-cardinality span names).
+- `internal/adapter/http/router.go`: `RouterDeps.Tracing bool`. When true,
+  NewRouter installs the span-namer (before Register) AND wraps the final mux
+  with `otelhttp.NewHandler(..., WithFilter(notInfra))` so /healthz,/readyz,
+  /metrics are excluded from tracing (mirrors their rate-limit exemption).
+- `internal/adapter/postgres`: when tracing on, set
+  `pgxConfig.ConnConfig.Tracer = otelpgx.NewTracer()` (gated, zero-overhead off).
+- `internal/app/app.go`: build the provider via observability.NewTracerProvider
+  (service name = app constant, version = the version param), store shutdown on
+  App, flush in Run's defers (mirror closePool); pass Tracing to NewRouter and
+  through resolveStore→postgres.Config.
+- `internal/config`: one flag `--tracing-enabled` (default false) + env + Load +
+  setDefaults + config_test.
+
+**Span quality:** otelhttp at the edge = server span + W3C propagation + full
+coverage (incl. chi middleware); the Huma span-namer gives operation-named spans
+(e.g. `get-todo`). Service-level manual spans left out of scope (HTTP+DB chosen).
+
+**Tests:** config default-off; `NewTracerProvider` enabled/disabled (restore
+global in cleanup); span-namer via humatest + an in-memory `tracetest` exporter
+and a simulated parent span, asserting the recorded span name == OperationID.
+otelpgx DB spans exercised by the integration suite running (not span-asserted).
+
+Next: worktree off `master`, implement, `root:check` + integration suite, PR.
