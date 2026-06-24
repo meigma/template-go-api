@@ -460,3 +460,35 @@ admin→200) then `down -v`. Review lens tuned for the docs-phase risk = INACCUR
 header/route/key/role/curl must match code; the prior repo docs phase shipped a /readyz
 shape bug — don't repeat). Validate = root:check + doc/code consistency (no recompose).
 Awaiting completion → gate-4 → then open the squash-merge PR.
+
+## 2026-06-23 19:44 — Phase D COMPLETE (gate 4 — all phases done); ready for PR
+Workflow `wf_19a23100-9f7` done (5 agents); 0 blocker/major. Commit `37634b1` added
+`hack/sql/0002_seed_api_keys.sql` (dev-user-key/role user, dev-admin-key/role admin; loud
+INSECURE/dev-only header; ON CONFLICT), README "Authorization" section + modular per-resource
+pattern + config table/layout rows, DELETE_ME removal recipe (replace-the-API-key-authn #1 +
+full surgical list + no-sqlc-regen note), docs/index quickstart with authz on. **CAPSTONE
+compose check ran live**: `docker compose up --build` → postgres→migrate→seed→api healthy,
+both keys seeded, observed: no cred→401, X-API-Key:dev-user-key→200, POST→201, admin→200,
+unknown→401, Bearer→200, by-id get/complete→200; then `down -v`. `moon run openapi` no drift.
+
+Review: 5 findings, 0 blocker/major. I applied the 3 worthwhile ones (commit `bf0b9aa`):
+(1) `apikey.go` package doc was stale — claimed removal regenerates the todo sqlc package,
+which contradicts our DELETE_ME and is empirically false (omit_unused_structs) → corrected;
+(2) README create-response example showed `completedAt:null` but the real DTO omits it
+(omitempty) + has `$schema` → corrected; (3) `compose.yaml` header curl returned 401 under
+authz-on → added the `X-API-Key` header. Left the seed's loud `-- ####` banner (intentional
+warning for committed mock creds). Re-verified: `go build`/`vet` + `moon run root:check` green.
+
+WHOLE TIER (independently verified across phases): branch `feat/authz-tier` = **10 commits,
++3997/−33, 49 files**. root:check green; build/vet/all unit tests green; integration suite
+green vs real postgres:17-alpine (14.3s, my re-run in Phase C); live compose day-one demo
+green (Phase D). Cedar (cedar-go) embedded engine, no portability layer; modular per-domain
+authz slices; deny-by-default Huma middleware (Install/Finalize split — fixes the latent
+Huma middleware-snapshot bug); URL-id→Resource binding; lazy request-scoped fact getter;
+API-key authn (postgres `api_keys`, X-API-Key/Bearer) as the replaceable deferred-authn seam;
+`--authz-enabled` (default true) + `--authz-policy-dir`; OpenAPI security stamped. Domain
+core untouched/Cedar-free; mockery for the new ports; omit_unused_structs keeps todo sqlc clean.
+
+Branch held LOCAL (unsigned `--no-gpg-sign` intermediate commits — squashed at merge). PAUSED
+for gate-4 approval → then push branch + `gh pr create` (squash-merge PR for the user's review).
+Follow-up still open (unchanged): wire `test-integration` into CI once a Docker runner exists.
