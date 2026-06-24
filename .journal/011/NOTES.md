@@ -322,3 +322,44 @@ CI green (`ci` 1m53s) and ran `root:test-integration` on the runner
 tracing #18). Remaining = housekeeping only: session 005 stuck `in-progress` in
 INDEX; untracked local tooling dirs in main checkout; defense-in-depth checksum
 pinning for the other 3 Proto plugins.
+
+## 2026-06-24 13:39 — Housekeeping: done (PRs #19, #20). Finalize pass COMPLETE.
+
+User chose "do all three" housekeeping, then "skip + document" for item 3.
+Outcome of each:
+
+- **Item 1 — session 005 "stuck in-progress": NO-OP (stale note).** Verified
+  against ground truth: INDEX row 005 is `complete` with a full `SUMMARY.md` +
+  NOTES + design docs in `.journal/005/`. It is NOT in-progress/empty. The
+  "005 in-progress" open-thread was copied forward through the 008/010 summaries
+  but never reflected reality by now. Nothing to mark abandoned — doing so would
+  have wrongly abandoned the merged authz tier. **Future sessions: stop
+  propagating this; 005 is done.**
+
+- **Item 2 — untracked local tooling dirs: RESOLVED (PR #19 + #20).** Added to
+  `.gitignore`: `.codex-security/` (Codex scan output, 7.5MB log), and
+  `.agents/skills/codex-security-scan/` (local scanning skill under the
+  otherwise-committed `.agents/skills`). Those two cleared immediately.
+  - **GOTCHA / root cause of the persistent `?? .claude`:** `.claude` is a
+    **symlink → `.agents`** (a local convenience so the harness finds the
+    committed skills). A trailing-slash gitignore pattern (`.claude/`) matches
+    only a real DIRECTORY, never a symlink — so the pre-existing `.claude/` rule
+    could never ignore it. **PR #20** changed `.claude/` → bare `.claude` (matches
+    dir OR symlink). `git status` is now fully clean. Verified the pattern
+    behavior in isolation (`.claude/` misses a symlink; `.claude` matches).
+    Spent a lot of forensics here (check-ignore, hexdump, global excludes, clean-
+    repo isolation) before spotting the symlink — the tell was `ls -la` not
+    listing `.claude` while `ls -la .claude` showed `.agents`' contents.
+
+- **Item 3 — Proto checksum pinning for golangci-lint/goose/mockery: SKIPPED +
+  DOCUMENTED (PR #19), per user.** Those three already verify downloads against
+  their publishers' `checksum-url`; sqlc is the only repo-pinned one because it
+  publishes no checksums. Repo-pinning the other three (sqlc-style) would mean
+  ~12 cross-platform binary digests to maintain on every bump, duplicating an
+  existing control. Documented the rationale in README "CI and Security".
+
+**Finalize pass COMPLETE.** Five merged PRs this session: #16 versioning, #17
+rate limiting, #18 tracing, #19 housekeeping (gitignore + checksum docs), #20
+`.claude` symlink gitignore fix. `master` at `5d120e2`, working tree clean, all
+worktrees/branches cleaned up, `.journal` untracked on master. Ready for
+session close (SUMMARY.md) on user request.
