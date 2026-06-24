@@ -6,7 +6,10 @@
 # entries below are local maintainer tooling and runtime state, not template
 # content. `.codex-security/` is Codex scan output; `codex-security-scan` is a
 # local scanning skill that lives under the otherwise-committed `.agents/skills`.
-.claude/
+# `.claude` has no trailing slash so it matches whether it is a directory (the
+# usual case) or a symlink into `.agents` (a local convenience) — a trailing
+# slash would match only a real directory.
+.claude
 .journal/
 .wt/
 .codex-security/
