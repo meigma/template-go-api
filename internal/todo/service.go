@@ -91,14 +91,23 @@ func (s *Service) Get(ctx context.Context, id string) (Todo, error) {
 	return found, nil
 }
 
-// List returns all stored todos.
-func (s *Service) List(ctx context.Context) ([]Todo, error) {
-	todos, err := s.repo.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list todos: %w", err)
+// List returns a bounded page of todos. It clamps the requested limit into
+// [1, MaxPageSize] (a non-positive limit uses DefaultPageSize) so the work per
+// call is bounded regardless of the caller, then delegates to the repository.
+func (s *Service) List(ctx context.Context, page PageQuery) (PageResult, error) {
+	switch {
+	case page.Limit <= 0:
+		page.Limit = DefaultPageSize
+	case page.Limit > MaxPageSize:
+		page.Limit = MaxPageSize
 	}
 
-	return todos, nil
+	result, err := s.repo.List(ctx, page)
+	if err != nil {
+		return PageResult{}, fmt.Errorf("list todos: %w", err)
+	}
+
+	return result, nil
 }
 
 // Complete marks the todo with the given id as completed. It is idempotent and

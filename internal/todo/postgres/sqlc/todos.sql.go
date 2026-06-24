@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getTodo = `-- name: GetTodo :one
@@ -30,11 +31,29 @@ func (q *Queries) GetTodo(ctx context.Context, id uuid.UUID) (Todo, error) {
 }
 
 const listTodos = `-- name: ListTodos :many
-SELECT id, title, status, created_at, completed_at FROM todos ORDER BY created_at
+SELECT id, title, status, created_at, completed_at FROM todos
+WHERE (
+    $1::timestamptz IS NULL
+    OR (created_at, id) > ($1::timestamptz, $2::uuid)
+)
+ORDER BY created_at, id
+LIMIT $3
 `
 
-func (q *Queries) ListTodos(ctx context.Context) ([]Todo, error) {
-	rows, err := q.db.Query(ctx, listTodos)
+type ListTodosParams struct {
+	AfterCreatedAt *time.Time
+	AfterID        pgtype.UUID
+	PageLimit      int32
+}
+
+// Keyset (cursor) pagination over the (created_at, id) ordering. The after_*
+// bound is NULL on the first page; otherwise the row-value comparison resumes
+// strictly after the prior page's last row. page_limit caps the rows scanned;
+// callers fetch one extra to detect whether a further page exists. The composite
+// index on (created_at, id) (see 00001_create_todos.sql) makes the seek
+// index-backed.
+func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]Todo, error) {
+	rows, err := q.db.Query(ctx, listTodos, arg.AfterCreatedAt, arg.AfterID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

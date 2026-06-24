@@ -31,8 +31,13 @@ curl -sS -X POST localhost:8080/todos \
   -H 'X-API-Key: dev-user-key' \
   -H 'content-type: application/json' \
   -d '{"title":"buy milk"}'                                       # => 201
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, the seeded todos
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, first page (keyset-paginated)
 ```
+
+`GET /todos` is keyset-paginated — it returns at most `limit` todos (default 20,
+max 100) plus an opaque `nextCursor`; pass that back as `?cursor=` for the next
+page. The bound applies even without `limit`, so one request can never pull the
+whole table.
 
 The stack seeds two mock keys: `dev-user-key` (role `user`, authorized for the
 todo actions) and `dev-admin-key` (role `admin`, authorized for everything).

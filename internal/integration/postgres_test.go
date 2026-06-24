@@ -4,6 +4,8 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -96,17 +98,19 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, repo.Save(ctx, makeTodo(t, "first")))
 		require.NoError(t, repo.Save(ctx, makeTodo(t, "second")))
 
-		got, err := repo.List(ctx)
+		got, err := repo.List(ctx, todo.PageQuery{Limit: 10})
 		require.NoError(t, err)
-		assert.Len(t, got, 2)
+		assert.Len(t, got.Todos, 2)
+		assert.Nil(t, got.Next, "a full collection within one page has no next cursor")
 	})
 
 	t.Run("ListEmpty", func(t *testing.T) {
 		repo := fix.Reset(ctx, t)
 
-		got, err := repo.List(ctx)
+		got, err := repo.List(ctx, todo.PageQuery{Limit: 10})
 		require.NoError(t, err)
-		assert.Empty(t, got)
+		assert.Empty(t, got.Todos)
+		assert.Nil(t, got.Next)
 	})
 
 	t.Run("ListOrdersByCreatedAt", func(t *testing.T) {
@@ -120,11 +124,69 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, repo.Save(ctx, newer))
 		require.NoError(t, repo.Save(ctx, older))
 
-		got, err := repo.List(ctx)
+		got, err := repo.List(ctx, todo.PageQuery{Limit: 10})
 		require.NoError(t, err)
-		require.Len(t, got, 2)
-		assert.Equal(t, older.ID, got[0].ID)
-		assert.Equal(t, newer.ID, got[1].ID)
+		require.Len(t, got.Todos, 2)
+		assert.Equal(t, older.ID, got.Todos[0].ID)
+		assert.Equal(t, newer.ID, got.Todos[1].ID)
+	})
+
+	t.Run("ListPaginatesByKeyset", func(t *testing.T) {
+		repo := fix.Reset(ctx, t)
+
+		// Six todos across three instants, two sharing each instant, so the
+		// (created_at, id) tiebreak — not created_at alone — fixes the order and
+		// keeps the keyset stable across pages.
+		base := time.Now().UTC().Truncate(pgTimePrecision)
+		saved := make([]todo.Todo, 0, 6)
+		for i := range 6 {
+			td := makeTodo(t, fmt.Sprintf("t%d", i))
+			td.CreatedAt = base.Add(time.Duration(i/2) * time.Second)
+			require.NoError(t, repo.Save(ctx, td))
+			saved = append(saved, td)
+		}
+
+		want := append([]todo.Todo(nil), saved...)
+		sort.Slice(want, func(i, j int) bool {
+			if want[i].CreatedAt.Equal(want[j].CreatedAt) {
+				return want[i].ID < want[j].ID
+			}
+
+			return want[i].CreatedAt.Before(want[j].CreatedAt)
+		})
+
+		// Walk the whole collection in pages of two via the returned cursor.
+		var got []todo.Todo
+		var after *todo.Cursor
+		for pages := 0; ; pages++ {
+			require.Less(t, pages, 10, "pagination did not terminate")
+			res, err := repo.List(ctx, todo.PageQuery{Limit: 2, After: after})
+			require.NoError(t, err)
+			require.LessOrEqual(t, len(res.Todos), 2, "a page must not exceed the limit")
+			got = append(got, res.Todos...)
+			if res.Next == nil {
+				break
+			}
+			after = res.Next
+		}
+
+		require.Len(t, got, len(want))
+		for i := range want {
+			assert.Equal(t, want[i].ID, got[i].ID, "row %d out of (created_at, id) order", i)
+		}
+	})
+
+	t.Run("ListRejectsMalformedCursor", func(t *testing.T) {
+		repo := fix.Reset(ctx, t)
+
+		// A cursor whose id is not a uuid is a tampered/stale token: the adapter
+		// reports it as ErrInvalidCursor (which the HTTP layer maps to 422), not
+		// a 500.
+		_, err := repo.List(ctx, todo.PageQuery{
+			Limit: 2,
+			After: &todo.Cursor{CreatedAt: time.Now().UTC(), ID: "not-a-uuid"},
+		})
+		require.ErrorIs(t, err, todo.ErrInvalidCursor)
 	})
 
 	t.Run("SaveUpsertReplaces", func(t *testing.T) {
@@ -150,9 +212,9 @@ func TestRepository(t *testing.T) {
 		assertTodoEqual(t, updated, got)
 
 		// The upsert replaces rather than inserts, so there is still one row.
-		all, err := repo.List(ctx)
+		all, err := repo.List(ctx, todo.PageQuery{Limit: 10})
 		require.NoError(t, err)
-		assert.Len(t, all, 1)
+		assert.Len(t, all.Todos, 1)
 	})
 
 	t.Run("SaveAndFindCompleted", func(t *testing.T) {
@@ -172,8 +234,8 @@ func TestRepository(t *testing.T) {
 
 		// Earlier subtests wrote rows; Reset must have restored the empty
 		// snapshot so this test starts clean.
-		got, err := repo.List(ctx)
+		got, err := repo.List(ctx, todo.PageQuery{Limit: 10})
 		require.NoError(t, err)
-		assert.Empty(t, got)
+		assert.Empty(t, got.Todos)
 	})
 }

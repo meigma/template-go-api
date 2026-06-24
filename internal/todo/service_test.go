@@ -115,8 +115,41 @@ func TestServiceListPropagatesError(t *testing.T) {
 	t.Parallel()
 
 	fix := newServiceFixture(t)
-	fix.repo.EXPECT().List(mock.Anything).Return(nil, errors.New("boom"))
+	fix.repo.EXPECT().List(mock.Anything, mock.Anything).Return(todo.PageResult{}, errors.New("boom"))
 
-	_, err := fix.service.List(context.Background())
+	_, err := fix.service.List(context.Background(), todo.PageQuery{Limit: 10})
 	require.Error(t, err)
+}
+
+func TestServiceListClampsLimit(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		requested int
+		want      int
+	}{
+		{"zero uses the default", 0, todo.DefaultPageSize},
+		{"negative uses the default", -5, todo.DefaultPageSize},
+		{"over the max is capped", todo.MaxPageSize + 50, todo.MaxPageSize},
+		{"within range is unchanged", 10, 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			fix := newServiceFixture(t)
+			// The repository only ever sees a clamped limit, so per-request work is
+			// bounded even for this direct (non-HTTP) caller.
+			fix.repo.EXPECT().
+				List(mock.Anything, mock.MatchedBy(func(p todo.PageQuery) bool {
+					return p.Limit == tc.want
+				})).
+				Return(todo.PageResult{}, nil)
+
+			_, err := fix.service.List(context.Background(), todo.PageQuery{Limit: tc.requested})
+			require.NoError(t, err)
+		})
+	}
 }

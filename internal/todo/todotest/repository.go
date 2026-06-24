@@ -8,6 +8,7 @@ package todotest
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/meigma/template-go-api/internal/todo"
@@ -50,15 +51,52 @@ func (r *Repository) FindByID(_ context.Context, id string) (todo.Todo, error) {
 	return stored, nil
 }
 
-// List returns all stored todos in unspecified order.
-func (r *Repository) List(_ context.Context) ([]todo.Todo, error) {
+// List returns a bounded page of todos, mirroring the keyset semantics of the
+// PostgreSQL adapter: it sorts by (CreatedAt, ID), resumes strictly after
+// page.After, and over-fetches by one to compute the next cursor.
+func (r *Repository) List(_ context.Context, page todo.PageQuery) (todo.PageResult, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	todos := make([]todo.Todo, 0, len(r.todos))
+	all := make([]todo.Todo, 0, len(r.todos))
 	for _, t := range r.todos {
-		todos = append(todos, t)
+		all = append(all, t)
+	}
+	r.mu.RUnlock()
+
+	sort.Slice(all, func(i, j int) bool { return less(all[i], all[j]) })
+
+	// Skip everything up to and including the cursor position.
+	start := 0
+	if page.After != nil {
+		for start < len(all) && !afterCursor(all[start], *page.After) {
+			start++
+		}
+	}
+	window := all[start:]
+
+	var next *todo.Cursor
+	if page.Limit > 0 && len(window) > page.Limit {
+		window = window[:page.Limit]
+		last := window[len(window)-1]
+		next = &todo.Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 
-	return todos, nil
+	return todo.PageResult{Todos: append([]todo.Todo(nil), window...), Next: next}, nil
+}
+
+// less orders todos by (CreatedAt, ID), the same total order the list query uses.
+func less(a, b todo.Todo) bool {
+	if a.CreatedAt.Equal(b.CreatedAt) {
+		return a.ID < b.ID
+	}
+
+	return a.CreatedAt.Before(b.CreatedAt)
+}
+
+// afterCursor reports whether t sorts strictly after c in (CreatedAt, ID) order.
+func afterCursor(t todo.Todo, c todo.Cursor) bool {
+	if t.CreatedAt.Equal(c.CreatedAt) {
+		return t.ID > c.ID
+	}
+
+	return t.CreatedAt.After(c.CreatedAt)
 }

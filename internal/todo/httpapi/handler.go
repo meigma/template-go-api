@@ -95,14 +95,20 @@ func (h *handlers) get(ctx context.Context, input *GetTodoInput) (*TodoOutput, e
 	return &TodoOutput{Body: toTodoDTO(found)}, nil
 }
 
-func (h *handlers) list(ctx context.Context, _ *struct{}) (*ListTodosOutput, error) {
-	todos, err := h.service.List(ctx)
+func (h *handlers) list(ctx context.Context, input *ListTodosInput) (*ListTodosOutput, error) {
+	after, err := decodeCursor(input.Cursor)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity("invalid cursor")
+	}
+
+	result, err := h.service.List(ctx, todo.PageQuery{Limit: input.Limit, After: after})
 	if err != nil {
 		return nil, toHumaError(err)
 	}
 
 	out := &ListTodosOutput{}
-	out.Body.Todos = toTodoDTOs(todos)
+	out.Body.Todos = toTodoDTOs(result.Todos)
+	out.Body.NextCursor = encodeCursor(result.Next)
 
 	return out, nil
 }
