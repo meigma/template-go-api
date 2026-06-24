@@ -545,13 +545,14 @@ non-root distroless runtime image. The default entrypoint runs the server:
 docker build --target test .
 docker build -t template-go-api:dev .
 docker run --rm -p 8080:8080 \
-  -e TEMPLATE_GO_API_DATABASE_URL='postgres://app:app@host.docker.internal:5432/app?sslmode=disable' \
+  -e TEMPLATE_GO_API_DATABASE_URL='postgres://<user>:<password>@host.docker.internal:5432/<db>' \
   template-go-api:dev
 ```
 
 The server requires a database, so pass `TEMPLATE_GO_API_DATABASE_URL` pointing at
-a PostgreSQL reachable from inside the container (`host.docker.internal` reaches a
-database on the host, such as the `template-pg` example above). For a fully wired
+a PostgreSQL reachable from inside the container — on Docker Desktop,
+`host.docker.internal` resolves to a database running on the host (see
+[Running with PostgreSQL](#running-with-postgresql)). For a fully wired
 API + PostgreSQL run, use the Compose stack instead.
 
 The Dockerfile pins the builder and runtime images by digest and verifies that
