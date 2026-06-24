@@ -31,3 +31,50 @@ Plan: wait for the user to share the review findings, then triage them
 likely via one or more PRs off `master`, following the worktree/PR flow. Will
 favor verifying each finding against `master` before acting (findings can be
 stale or false positives).
+
+## 2026-06-23 22:11 — Finding 2/3: plaintext API-key storage → SHA-256 at rest (PR #13 open)
+Codex Security finding 2 of 3 (Medium, CWE-256/CWE-522): the default API-key
+store kept the credential itself in `api_keys.key` and matched by direct equality
+(`WHERE key = $1`), so a table/backup dump leaked replayable credentials. Valid —
+confirmed against `master` via two Explore agents.
+
+Remediation (plan: `~/.claude/plans/here-is-the-first-logical-hartmanis.md`,
+approved): store only a lowercase-hex SHA-256 digest (`key` → `key_hash`), look up
+by the hash of the presented key. SHA-256 (no salt) is correct for high-entropy
+tokens; it's the exact path the package's own `SECURITY:` comment prescribed.
+
+Key design decisions (some user-chosen via AskUserQuestion):
+- **Hash below the port** — hashing lives in `apikey.Store`; the Authenticator
+  still passes the raw key, so the `APIKeyStore` interface, its mockery mock, and
+  the mock-based unit tests are untouched. (mockery-check confirmed: no drift.)
+- **Seed + integration tests hash in SQL** via `encode(sha256($1::bytea),'hex')`
+  (Postgres built-in, no pgcrypto). Plaintext dev keys stay readable; the
+  integration suite passing PROVES Go-hash == SQL-hash agreement.
+- **Edited migration `00002` in place** (user pick) — unreleased table, all DBs
+  build fresh; keeps clean inherited history. No `00003` ALTER.
+- **No new CLI** (user pick) — documented the `printf '%s' "$KEY" | sha256sum`
+  mint one-liner in DELETE_ME/README/docs instead.
+- **No `ConstantTimeCompare`** — indexed equality on a preimage-resistant 256-bit
+  digest is not a practical timing oracle; rewrote the SECURITY comment to say so
+  rather than promise a compare we (correctly) don't do.
+
+Files (8): `00002_create_api_keys.sql`, `apikey/store.go`, `apikey/apikey.go`,
+`hack/sql/0002_seed_api_keys.sql`, `integration/apikey_store_test.go`, README,
+DELETE_ME, docs/index.
+
+Verified: `root:check` green (no sqlc/mockery/openapi drift — column rename and
+below-port hashing disturb neither generated code nor OpenAPI); `test-integration`
+green vs postgres:17 (11.5s); compose smoke — dev-user-key→200, dev-admin Bearer→
+200, bogus→401, no key→401; `api_keys` holds only 64-char hex digests, plaintext
+appears 0× as a stored value.
+
+GOTCHA hit again: `root:lint` first failed on a stale golangci cache pointing at
+removed sibling worktrees (`.wt/ci-run-integration-tests`, etc.) — the session-007
+lesson. `golangci-lint cache clean` fixed it; re-run green.
+
+Branch `fix/api-key-hashing` (`f866af5`) → PR #13
+(https://github.com/meigma/template-go-api/pull/13), `fix(authz): store API keys
+as SHA-256 hashes at rest`. CI watching (`gh pr checks 13 --watch`); this PR
+touches `.go`+migration so it should actually exercise `test-integration` on the
+runner. Next: merge on green, clean up worktree. Findings 1 and 3 still pending
+from the user.
