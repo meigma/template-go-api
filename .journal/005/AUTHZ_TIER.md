@@ -87,6 +87,12 @@ is a cross-cutting concern at `internal/authz` (sibling to `config`/`observabili
 `internal/adapter/postgres/migrations`; the *mock keys* are data → a dev-only `hack/sql/`
 seed (the session-006 hook, applied after migrations, never in a real deploy).
 
+Because the todo sqlc config reads the whole shared migrations dir as its schema, the
+`api_keys` table would otherwise emit an unused `ApiKey` model into the todo sqlc package.
+Resolved by setting **`omit_unused_structs: true`** in `sqlc.yaml` (verified): sqlc emits
+models only for tables a todo query references, so the todo sqlc package stays todo-only
+and the api_keys migration produces no todo-sqlc output — keeping feature removal surgical.
+
 **Package naming.** The slice package is `package authz` at `internal/todo/authz`. Since
 the base engine is *also* `package authz` (`internal/authz`), the two files that need
 both (the composition root and `internal/todo/httpapi`) alias the slice on import — e.g.

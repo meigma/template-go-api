@@ -332,3 +332,17 @@ CARRY-FORWARD (deferred, surfaced to user):
 - `--authz-enabled=false` Phase-A default (design §9 updated to note the deferral; Phase B
   flips to true).
 Branch held local (not pushed); PR at end of phases. PAUSED for gate-1 approval → Phase B.
+
+## 2026-06-23 18:16 — sqlc bleed resolved: omit_unused_structs (verified)
+User chose to fix (not accept) the sqlc `ApiKey` bleed. Verified `omit_unused_structs` is
+a real sqlc Go-gen option via context7 (sqlc docs: "prevents sqlc from generating structs
+for tables and enums that are not referenced in any queries within a package"). Applied
+directly (self-verifying tooling): added `omit_unused_structs: true` to `sqlc.yaml`'s
+go gen block, ran `moon run sqlc`. Before: models.go had `ApiKey` + `Todo`; AFTER: only
+`Todo`. Diff is exactly models.go (−6, the ApiKey struct) + sqlc.yaml (+6) — no other
+generated files touched. `moon run root:sqlc-check` green (no drift), `go build ./...`
+exit 0, full `moon run root:check` green (10 tasks). Committed `138d8e9` on
+`feat/authz-tier`. Bonus realized: the api_keys migration now produces ZERO todo-sqlc
+output, so feature removal is truly surgical (no todo regen needed). AUTHZ_TIER.md §2
+updated to record the decision. Branch now 3 commits (edc53c1, 752a69d, 138d8e9).
+Gate-1's one open item is resolved → ready for full Phase B on approval.
