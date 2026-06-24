@@ -513,3 +513,19 @@ PR is ready for the user's review + squash-merge (their call; the squash commit 
 be signed at merge). Authz tier work is functionally DONE pending that merge. After merge:
 session-close (write SUMMARY, flip 005 → complete in INDEX, post-merge branch/worktree cleanup
 per memory `gh-merge-delete-branch-worktree-fails`).
+
+## 2026-06-23 19:56 — Close
+User: "LGTM. Please merge the PR and then close out this session." **PR #10 squash-merged**
+to `master` `13a1fe5` (+3997/−35, 49 files). As predicted by memory
+`gh-merge-delete-branch-worktree-fails`, `gh pr merge --squash --delete-branch` failed its
+LOCAL cleanup ("master is already used by worktree") but the server-side merge succeeded; I
+finished by hand: deleted the remote branch (`git push origin --delete feat/authz-tier`),
+fast-forwarded the main checkout (`8a46286..13a1fe5`, `git pull --ff-only`), and removed the
+worktree + local branch (`wt remove feat/authz-tier`, tree matched master). Worktrees back to
+`master` + journal only.
+
+Closeout recorded: `SUMMARY.md` written (postmortem incl. Lessons); `INDEX.md` row 005 →
+**complete**; `TECH_NOTES.md` gained the authz-tier durable bullet and dropped authn/authz
+from the open-seams list. Hand-off: authz tier is on `master` and live (deny-by-default Cedar
+middleware, API-key authn as the replaceable seam). Remaining follow-up (unchanged, no date):
+wire `test-integration` into CI once a Docker-capable runner exists. Session 005 DONE.
