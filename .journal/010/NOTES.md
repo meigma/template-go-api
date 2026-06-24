@@ -154,3 +154,52 @@ Invariants OK: only `master` + `journal/jmgilman`; `git ls-files .journal` empty
 
 Finding 3/3 COMPLETE. Findings 2/3 and 3/3 both shipped this session (PRs #13,
 #14). Finding 1/3 NOT yet shared by the user — session stays open for it.
+
+## 2026-06-24 09:09 — Finding 1/3: sqlc binary downloaded without integrity check (PR #15 open)
+Codex finding 1 of 3 (Medium, CWE-494): the sqlc CLI is fetched by its local Proto
+plugin and executed with no integrity verification.
+
+Three Explore agents + a Proto docs/source follow-up refined the scope:
+- Of the 4 Proto plugins, ONLY sqlc lacks a check. golangci-lint/goose/mockery
+  already set `checksum-url` (verify upstream checksum file). **sqlc v1.31.1
+  publishes archives ONLY — no checksums file, no signature** (verified via gh).
+- So `checksum-url`→upstream is impossible for sqlc; none of the 4 sign (no
+  `checksum-public-key`). Proto can't reference a local/`file://` checksum file,
+  and the `.protolock` lockfile is unstable + unconfirmed for a no-checksum-url
+  tool — both unfit for a template.
+
+User-chosen (AskUserQuestion): **repo-pinned per-platform binary SHA-256 + a
+`sqlc-verify` guard**, scope **sqlc only**.
+
+Implementation (plan `~/.claude/plans/here-is-the-first-logical-hartmanis.md`):
+- New `.moon/proto/sqlc.sha256` — sqlc 1.31.1 binary SHA-256 for darwin/linux ×
+  arm64/amd64 + header w/ regen recipe. **Trust anchor:** each archive was
+  verified against GitHub's published per-asset digest (`gh api .../releases/...`
+  → `digest: sha256:`) BEFORE extracting+hashing the binary. darwin_arm64
+  cross-checked against this machine's `proto bin sqlc` (matched).
+- New `moon.yml` `sqlc-verify` task: `proto install sqlc` + `proto bin sqlc` to
+  install/locate WITHOUT executing sqlc, hash the binary (sha256sum||shasum),
+  compare to the pinned digest for `uname` os/arch, fail closed on
+  mismatch/unpinned. Wired as a dep of `sqlc` + `sqlc-check` and added to the
+  `check` aggregate deps (so it runs in CI).
+- Docs: README per-tool-verification note (+ version-bump refreshes digests);
+  DELETE_ME "remove SQL persistence" list updated for the new artifacts.
+
+KEY mechanics learned: `proto bin <tool>` returns the binary path and installs on
+demand WITHOUT executing the tool (verify-before-exec is real). GitHub's release
+API exposes a per-asset `digest` (sha256 of the ARCHIVE) — the trust anchor when
+upstream ships no checksums file. sqlc binary hashes are deterministic per
+version+platform (GoReleaser artifacts).
+
+Verified: `moon run sqlc-verify` passes (darwin_arm64); **tamper negative-test** —
+zeroed the pinned hash → task FAILED with expected/got mismatch → reverted (proves
+the control); `moon run sqlc` regenerates with no drift (verify runs first);
+`moon run root:check` green (11 tasks, sqlc-verify in the pipeline).
+
+Branch `fix/sqlc-integrity` → PR #15
+(https://github.com/meigma/template-go-api/pull/15),
+`build(sqlc): verify the pinned sqlc binary against a committed checksum`. CI
+watching — WATCH: this PR touches moon.yml + .sha256 + docs (no .go/migrations),
+so confirm affected-gating still runs `sqlc-verify` on linux (.moon/proto/
+sqlc.sha256 is one of its inputs, so it should). Next: merge on green, clean up.
+This is the LAST of the 3 findings.
