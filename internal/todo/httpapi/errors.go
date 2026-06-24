@@ -16,6 +16,8 @@ func toHumaError(err error) error {
 		return huma.Error404NotFound("todo not found")
 	case errors.Is(err, todo.ErrInvalidTitle):
 		return huma.Error422UnprocessableEntity("invalid todo", err)
+	case errors.Is(err, todo.ErrInvalidCursor):
+		return huma.Error422UnprocessableEntity("invalid cursor")
 	default:
 		return huma.Error500InternalServerError("internal server error")
 	}

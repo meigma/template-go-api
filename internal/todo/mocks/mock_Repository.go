@@ -105,27 +105,25 @@ func (_c *Repository_FindByID_Call) RunAndReturn(run func(ctx context.Context, i
 }
 
 // List provides a mock function for the type Repository
-func (_mock *Repository) List(ctx context.Context) ([]todo.Todo, error) {
-	ret := _mock.Called(ctx)
+func (_mock *Repository) List(ctx context.Context, page todo.PageQuery) (todo.PageResult, error) {
+	ret := _mock.Called(ctx, page)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []todo.Todo
+	var r0 todo.PageResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]todo.Todo, error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.PageQuery) (todo.PageResult, error)); ok {
+		return returnFunc(ctx, page)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []todo.Todo); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.PageQuery) todo.PageResult); ok {
+		r0 = returnFunc(ctx, page)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]todo.Todo)
-		}
+		r0 = ret.Get(0).(todo.PageResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, todo.PageQuery) error); ok {
+		r1 = returnFunc(ctx, page)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -139,29 +137,35 @@ type Repository_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *Repository_Expecter) List(ctx any) *Repository_List_Call {
-	return &Repository_List_Call{Call: _e.mock.On("List", ctx)}
+//   - page todo.PageQuery
+func (_e *Repository_Expecter) List(ctx any, page any) *Repository_List_Call {
+	return &Repository_List_Call{Call: _e.mock.On("List", ctx, page)}
 }
 
-func (_c *Repository_List_Call) Run(run func(ctx context.Context)) *Repository_List_Call {
+func (_c *Repository_List_Call) Run(run func(ctx context.Context, page todo.PageQuery)) *Repository_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
+		var arg1 todo.PageQuery
+		if args[1] != nil {
+			arg1 = args[1].(todo.PageQuery)
+		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
 }
 
-func (_c *Repository_List_Call) Return(todos []todo.Todo, err error) *Repository_List_Call {
-	_c.Call.Return(todos, err)
+func (_c *Repository_List_Call) Return(pageResult todo.PageResult, err error) *Repository_List_Call {
+	_c.Call.Return(pageResult, err)
 	return _c
 }
 
-func (_c *Repository_List_Call) RunAndReturn(run func(ctx context.Context) ([]todo.Todo, error)) *Repository_List_Call {
+func (_c *Repository_List_Call) RunAndReturn(run func(ctx context.Context, page todo.PageQuery) (todo.PageResult, error)) *Repository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

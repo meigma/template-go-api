@@ -276,7 +276,9 @@ func (noopRepository) FindByID(_ context.Context, _ string) (todo.Todo, error) {
 	return todo.Todo{}, todo.ErrNotFound
 }
 
-func (noopRepository) List(_ context.Context) ([]todo.Todo, error) { return nil, nil }
+func (noopRepository) List(_ context.Context, _ todo.PageQuery) (todo.PageResult, error) {
+	return todo.PageResult{}, nil
+}
 
 // registerResources composes the per-resource HTTP adapters mounted on the API.
 // Add a new resource by constructing its service above and adding one Register

@@ -78,8 +78,11 @@ components:
           format: uri
           readOnly: true
           type: string
+        nextCursor:
+          description: Opaque cursor for the next page; omitted when this is the last page.
+          type: string
         todos:
-          description: All stored todos.
+          description: The page of todos, oldest first.
           items:
             $ref: "#/components/schemas/TodoDTO"
           nullable: true
@@ -136,6 +139,25 @@ paths:
   /todos:
     get:
       operationId: list-todos
+      parameters:
+        - description: Maximum number of todos to return per page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: Maximum number of todos to return per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: Opaque pagination cursor copied from a previous response's nextCursor; omit for the first page.
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque pagination cursor copied from a previous response's nextCursor; omit for the first page.
+            type: string
       responses:
         "200":
           content:

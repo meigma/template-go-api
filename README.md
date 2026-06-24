@@ -67,7 +67,8 @@ curl -sS -X POST localhost:8080/todos \
   -d '{"title":"buy milk"}'
 # => 201 {"$schema":"...","id":"...","title":"buy milk","status":"open","createdAt":"..."}
 
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos               # list
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos                          # list (first page, default 20)
+curl -sS -H 'X-API-Key: dev-user-key' 'localhost:8080/todos?limit=50&cursor=<next>' # next page
 curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>          # fetch one (404 if unknown)
 curl -sS -X POST -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>/complete   # mark complete
 
@@ -79,6 +80,14 @@ curl -sS -i -X POST localhost:8080/todos \
 
 These mock keys are dev-only seeds; see [Authorization](#authorization) for how
 authn/authz work and how to plug in a real authenticator.
+
+`GET /todos` is **keyset-paginated**: it returns at most `limit` todos (default
+20, max 100; an out-of-range `limit` is a 422) ordered by `(createdAt, id)`, plus
+an opaque `nextCursor`. Pass that cursor back as `?cursor=` to fetch the next
+page; the last page omits it. The bound is applied even when `limit` is absent,
+so a single request can never materialize the whole table — the reference
+pattern for a bounded collection endpoint. Cross-cutting **rate limiting** is a
+deliberate future seam and is not shipped.
 
 Operational endpoints:
 

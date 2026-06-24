@@ -33,9 +33,18 @@ type TodoOutput struct {
 	Body TodoDTO
 }
 
+// ListTodosInput carries the pagination parameters for the list operation. The
+// limit bounds per-request work; the maximum/default literals mirror
+// todo.MaxPageSize/todo.DefaultPageSize (a test asserts they agree).
+type ListTodosInput struct {
+	Limit  int    `query:"limit"  minimum:"1" maximum:"100" default:"20" doc:"Maximum number of todos to return per page."`
+	Cursor string `query:"cursor"                                        doc:"Opaque pagination cursor copied from a previous response's nextCursor; omit for the first page."`
+}
+
 // ListTodosOutput wraps the todo collection response body.
 type ListTodosOutput struct {
 	Body struct {
-		Todos []TodoDTO `json:"todos" doc:"All stored todos."`
+		Todos      []TodoDTO `json:"todos" doc:"The page of todos, oldest first."`
+		NextCursor string    `json:"nextCursor,omitempty" doc:"Opaque cursor for the next page; omitted when this is the last page."`
 	}
 }

@@ -12,7 +12,13 @@ import (
 
 type Querier interface {
 	GetTodo(ctx context.Context, id uuid.UUID) (Todo, error)
-	ListTodos(ctx context.Context) ([]Todo, error)
+	// Keyset (cursor) pagination over the (created_at, id) ordering. The after_*
+	// bound is NULL on the first page; otherwise the row-value comparison resumes
+	// strictly after the prior page's last row. page_limit caps the rows scanned;
+	// callers fetch one extra to detect whether a further page exists. The composite
+	// index on (created_at, id) (see 00001_create_todos.sql) makes the seek
+	// index-backed.
+	ListTodos(ctx context.Context, arg ListTodosParams) ([]Todo, error)
 	// Insert-or-replace by primary key.
 	UpsertTodo(ctx context.Context, arg UpsertTodoParams) error
 }
