@@ -144,3 +144,13 @@ Branch `fix/todo-pagination` → PR #14
 (https://github.com/meigma/template-go-api/pull/14),
 `feat(todo): paginate the list endpoint with keyset cursors`. CI watching. Next:
 merge on green, clean up. Finding 1 still pending from the user.
+
+## 2026-06-24 08:4x — Finding 3/3 merged (PR #14 `879e2be`)
+CI green; confirmed `root:test-integration | ok internal/integration 20.999s` ran
+on `ubuntu-latest` (PR touched `.go`+migration). Squash-merged PR #14 → `master
+879e2be`. Cleanup done: remote branch deleted, worktree removed, local branch
+force-deleted (squash-merge shows "unmerged"), master fast-forwarded to `879e2be`.
+Invariants OK: only `master` + `journal/jmgilman`; `git ls-files .journal` empty.
+
+Finding 3/3 COMPLETE. Findings 2/3 and 3/3 both shipped this session (PRs #13,
+#14). Finding 1/3 NOT yet shared by the user — session stays open for it.
