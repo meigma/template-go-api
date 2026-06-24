@@ -136,7 +136,7 @@ info:
   version: dev
 openapi: 3.0.3
 paths:
-  /todos:
+  /v1/todos:
     get:
       operationId: list-todos
       parameters:
@@ -202,7 +202,7 @@ paths:
       summary: Create a todo
       tags:
         - Todos
-  /todos/{id}:
+  /v1/todos/{id}:
     get:
       operationId: get-todo
       parameters:
@@ -244,7 +244,7 @@ paths:
       summary: Get a todo by id
       tags:
         - Todos
-  /todos/{id}/complete:
+  /v1/todos/{id}/complete:
     post:
       operationId: complete-todo
       parameters:

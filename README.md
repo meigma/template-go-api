@@ -62,23 +62,23 @@ sent via the `X-API-Key` header:
 
 ```sh
 # Without a key, protected routes reject the request:
-curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/v1/todos
 # => 401
 
 # Create a todo (the user key has the role the todo policy requires):
-curl -sS -X POST localhost:8080/todos \
+curl -sS -X POST localhost:8080/v1/todos \
   -H 'X-API-Key: dev-user-key' \
   -H 'content-type: application/json' \
   -d '{"title":"buy milk"}'
 # => 201 {"$schema":"...","id":"...","title":"buy milk","status":"open","createdAt":"..."}
 
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos                          # list (first page, default 20)
-curl -sS -H 'X-API-Key: dev-user-key' 'localhost:8080/todos?limit=50&cursor=<next>' # next page
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>          # fetch one (404 if unknown)
-curl -sS -X POST -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>/complete   # mark complete
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos                          # list (first page, default 20)
+curl -sS -H 'X-API-Key: dev-user-key' 'localhost:8080/v1/todos?limit=50&cursor=<next>' # next page
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos/<id>          # fetch one (404 if unknown)
+curl -sS -X POST -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos/<id>/complete   # mark complete
 
 # Validation and not-found errors use RFC 9457 problem+json:
-curl -sS -i -X POST localhost:8080/todos \
+curl -sS -i -X POST localhost:8080/v1/todos \
   -H 'X-API-Key: dev-user-key' -H 'content-type: application/json' -d '{"title":""}'
 # => 422 application/problem+json
 ```
@@ -86,7 +86,12 @@ curl -sS -i -X POST localhost:8080/todos \
 These mock keys are dev-only seeds; see [Authorization](#authorization) for how
 authn/authz work and how to plug in a real authenticator.
 
-`GET /todos` is **keyset-paginated**: it returns at most `limit` todos (default
+Resource routes are served under a `/v1` URL version prefix; the operational
+endpoints below (`/healthz`, `/readyz`, `/metrics`, `/docs`, `/openapi.*`) are
+not part of the versioned contract and stay at the root. See
+[API versioning](#api-versioning) for how a later `/v2` is added.
+
+`GET /v1/todos` is **keyset-paginated**: it returns at most `limit` todos (default
 20, max 100; an out-of-range `limit` is a 422) ordered by `(createdAt, id)`, plus
 an opaque `nextCursor`. Pass that cursor back as `?cursor=` to fetch the next
 page; the last page omits it. The bound is applied even when `limit` is absent,
@@ -120,10 +125,10 @@ dev-only mock API keys (`hack/sql/0002_seed_api_keys.sql`), so the
 docker compose up --build
 
 # Authorization is on by default. With no key, a protected route returns 401:
-curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos   # => 401
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/v1/todos   # => 401
 
 # With the seeded dev user key, the same route returns 200 and the seeded todos:
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, the seeded todos
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos       # => 200, the seeded todos
 
 curl -sS localhost:8080/readyz   # => {"status":"ready","checks":{"postgres":"ok"}}
 ```
@@ -505,7 +510,7 @@ package root, with its adapters nested beneath it.
 2. Implement the port in a nested adapter — mirror `internal/todo/postgres` for a PostgreSQL-backed datastore (see [Persistence](#persistence) for the sqlc/goose workflow). sqlc generates one package per `sql:` block, so add a second `sql:` entry in `sqlc.yaml` for the new resource and update the literal paths in the `sqlc-check`, `mockery`, and `mockery-check` tasks (`moon.yml`) so the new generated/mocked packages stay drift-guarded.
 3. Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
 4. Add an authz slice `internal/<resource>/authz` (policies, actions, fact resolver) and tag the `httpapi` operations with `authz.Require`/`authz.Public`, then merge its `Contribution` in `internal/app/app.go`. See [Authorization](#authorization) — deny-by-default means an untagged operation is rejected.
-5. Add one `Register` call in `registerResources` in `internal/app/app.go`.
+5. Add one `Register` call in `registerResources` in `internal/app/app.go`, onto the `/v1` version group (see [API versioning](#api-versioning)).
 
 Shared, cross-domain infrastructure needs no changes: the generic transport in
 `internal/adapter/http` and the connection pool / migrations in
@@ -516,6 +521,38 @@ already shows. After changing the API, run `moon run root:openapi` to refresh th
 committed spec (CI fails if it drifts). If you back the resource with PostgreSQL,
 also add its readiness check to the `Readiness` slice in `internal/app/app.go` so
 `/readyz` reflects it.
+
+## API versioning
+
+Resource routes are served under a URL version prefix (`/v1`); the operational
+endpoints (`/healthz`, `/readyz`, `/metrics`, `/docs`, `/openapi.*`) are not part
+of the versioned contract and stay at the root. The prefix is applied once, in
+`registerResources` (`internal/app/app.go`), via Huma's group seam:
+
+```go
+v1 := huma.NewGroup(api, "/v1")
+httpapi.Register(v1, todoService)
+```
+
+A `huma.Group` *is* a `huma.API`, so a resource's `Register` is identical whether
+it mounts on a version group or the root API — and the authz middleware installed
+on the root API is inherited by every grouped route. Each resource adapter keeps
+declaring unprefixed paths (`Path: "/todos"`); the group prepends `/v1`, so the
+running router and the committed OpenAPI document both report `/v1/todos`.
+
+Introduce a breaking revision by adding a sibling group and registering the
+changed resources on it; unchanged resources keep registering on `v1`:
+
+```go
+v1 := huma.NewGroup(api, "/v1")
+v2 := huma.NewGroup(api, "/v2")
+httpapi.Register(v1, todoService)        // unchanged endpoints stay on v1
+todohttpapiv2.Register(v2, todoService)  // only the revised ones move to v2
+```
+
+Both versions then serve side by side and share one OpenAPI document. URL-path
+versioning is the default a reference template should teach: it is discoverable,
+cache- and proxy-friendly, and explicit in both the URL and the spec.
 
 ## Documentation
 

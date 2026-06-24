@@ -24,20 +24,25 @@ the todo routes are protected by the authorization tier (on by default):
 docker compose up --build
 
 # Authorization is on: without a key, a protected route returns 401.
-curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos   # => 401
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/v1/todos   # => 401
 
 # Use the seeded dev user key (sent via the X-API-Key header):
-curl -sS -X POST localhost:8080/todos \
+curl -sS -X POST localhost:8080/v1/todos \
   -H 'X-API-Key: dev-user-key' \
   -H 'content-type: application/json' \
   -d '{"title":"buy milk"}'                                       # => 201
-curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, first page (keyset-paginated)
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos       # => 200, first page (keyset-paginated)
 ```
 
-`GET /todos` is keyset-paginated — it returns at most `limit` todos (default 20,
-max 100) plus an opaque `nextCursor`; pass that back as `?cursor=` for the next
-page. The bound applies even without `limit`, so one request can never pull the
-whole table.
+`GET /v1/todos` is keyset-paginated — it returns at most `limit` todos (default
+20, max 100) plus an opaque `nextCursor`; pass that back as `?cursor=` for the
+next page. The bound applies even without `limit`, so one request can never pull
+the whole table.
+
+Resource routes are served under a `/v1` URL version prefix; the operational
+endpoints (`/healthz`, `/readyz`, `/metrics`, `/docs`, `/openapi.*`) are
+unversioned. See the README's [API versioning](https://github.com/meigma/template-go-api#api-versioning)
+section for how a later `/v2` is added.
 
 The stack seeds two mock keys: `dev-user-key` (role `user`, authorized for the
 todo actions) and `dev-admin-key` (role `admin`, authorized for everything).

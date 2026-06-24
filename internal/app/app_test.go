@@ -69,7 +69,7 @@ func TestAppWiring(t *testing.T) {
 	handler.ServeHTTP(healthRec, healthReq)
 	assert.Equal(t, http.StatusOK, healthRec.Code)
 
-	createReq := httptest.NewRequest(http.MethodPost, "/todos", strings.NewReader(`{"title":"x"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/v1/todos", strings.NewReader(`{"title":"x"}`))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	handler.ServeHTTP(createRec, createReq)
@@ -91,7 +91,7 @@ func TestAppWiringDeniesUnauthorized(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	createReq := httptest.NewRequest(http.MethodPost, "/todos", strings.NewReader(`{"title":"x"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/v1/todos", strings.NewReader(`{"title":"x"}`))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	application.Handler().ServeHTTP(createRec, createReq)

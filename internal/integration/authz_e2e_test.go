@@ -143,43 +143,43 @@ func TestAuthzEndToEnd(t *testing.T) {
 
 	t.Run("NoCredentialIsUnauthorized", func(t *testing.T) {
 		// Anonymous on a protected route -> 401 (no principal + deny path), not 403.
-		got := e2eRequest(t, srv, http.MethodGet, "/todos", "")
+		got := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "")
 		assert.Equal(t, http.StatusUnauthorized, got.status, got.body)
 
-		got = e2eRequest(t, srv, http.MethodPost, "/todos", `{"title":"x"}`)
+		got = e2eRequest(t, srv, http.MethodPost, "/v1/todos", `{"title":"x"}`)
 		assert.Equal(t, http.StatusUnauthorized, got.status, got.body)
 	})
 
 	t.Run("UnauthorizedRoleIsForbidden", func(t *testing.T) {
 		// guest-key authenticates (so it is not anonymous) but carries neither the
 		// user nor admin role the policies grant -> 403, not 401.
-		got := e2eRequest(t, srv, http.MethodGet, "/todos", "", apiKey("guest-key"))
+		got := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "", apiKey("guest-key"))
 		assert.Equal(t, http.StatusForbidden, got.status, got.body)
 
-		got = e2eRequest(t, srv, http.MethodPost, "/todos", `{"title":"x"}`, apiKey("guest-key"))
+		got = e2eRequest(t, srv, http.MethodPost, "/v1/todos", `{"title":"x"}`, apiKey("guest-key"))
 		assert.Equal(t, http.StatusForbidden, got.status, got.body)
 	})
 
 	t.Run("UserKeyIsAllowedAcrossGrantedRoutes", func(t *testing.T) {
 		// create (collection, type-level resource) -> 201.
-		created := e2eRequest(t, srv, http.MethodPost, "/todos", `{"title":"buy milk"}`, apiKey("user-key"))
+		created := e2eRequest(t, srv, http.MethodPost, "/v1/todos", `{"title":"buy milk"}`, apiKey("user-key"))
 		require.Equal(t, http.StatusCreated, created.status, created.body)
 		id := createdID(t, created.body)
 
 		// list (collection) -> 200.
-		listed := e2eRequest(t, srv, http.MethodGet, "/todos", "", apiKey("user-key"))
+		listed := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "", apiKey("user-key"))
 		assert.Equal(t, http.StatusOK, listed.status, listed.body)
 
 		// get by id -> 200 for the todo created above: the by-id route is reachable,
 		// authorized for the user role, and returns the same instance. (The
 		// Resource = Todo::"<id>" binding is proven in TestMiddlewareBindsURLIDToResource;
 		// the coarse policy here allows any resource.)
-		fetched := e2eRequest(t, srv, http.MethodGet, "/todos/"+id, "", apiKey("user-key"))
+		fetched := e2eRequest(t, srv, http.MethodGet, "/v1/todos/"+id, "", apiKey("user-key"))
 		assert.Equal(t, http.StatusOK, fetched.status, fetched.body)
 		assert.Equal(t, id, createdID(t, fetched.body))
 
 		// complete by id (URL-identity, update action) -> 200.
-		completed := e2eRequest(t, srv, http.MethodPost, "/todos/"+id+"/complete", "", apiKey("user-key"))
+		completed := e2eRequest(t, srv, http.MethodPost, "/v1/todos/"+id+"/complete", "", apiKey("user-key"))
 		assert.Equal(t, http.StatusOK, completed.status, completed.body)
 		var out struct {
 			Status string `json:"status"`
@@ -192,28 +192,28 @@ func TestAuthzEndToEnd(t *testing.T) {
 		// The admin role is granted everything by base.cedar's admin override, not
 		// by the todo slice policy, so this proves the merged PolicySet evaluates
 		// the cross-cutting rule too.
-		created := e2eRequest(t, srv, http.MethodPost, "/todos", `{"title":"admin task"}`, apiKey("admin-key"))
+		created := e2eRequest(t, srv, http.MethodPost, "/v1/todos", `{"title":"admin task"}`, apiKey("admin-key"))
 		require.Equal(t, http.StatusCreated, created.status, created.body)
 		id := createdID(t, created.body)
 
-		fetched := e2eRequest(t, srv, http.MethodGet, "/todos/"+id, "", apiKey("admin-key"))
+		fetched := e2eRequest(t, srv, http.MethodGet, "/v1/todos/"+id, "", apiKey("admin-key"))
 		assert.Equal(t, http.StatusOK, fetched.status, fetched.body)
 
-		listed := e2eRequest(t, srv, http.MethodGet, "/todos", "", apiKey("admin-key"))
+		listed := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "", apiKey("admin-key"))
 		assert.Equal(t, http.StatusOK, listed.status, listed.body)
 	})
 
 	t.Run("BearerCredentialAlsoAuthenticates", func(t *testing.T) {
 		// The same user key presented as an Authorization: Bearer credential must
 		// resolve identically, proving the second accepted credential carrier.
-		listed := e2eRequest(t, srv, http.MethodGet, "/todos", "", bearer("user-key"))
+		listed := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "", bearer("user-key"))
 		assert.Equal(t, http.StatusOK, listed.status, listed.body)
 	})
 
 	t.Run("UnknownKeyIsUnauthorized", func(t *testing.T) {
 		// A present-but-unknown credential is a 401 (invalid credential), distinct
 		// from the missing-credential and wrong-role cases above.
-		got := e2eRequest(t, srv, http.MethodGet, "/todos", "", apiKey("not-a-real-key"))
+		got := e2eRequest(t, srv, http.MethodGet, "/v1/todos", "", apiKey("not-a-real-key"))
 		assert.Equal(t, http.StatusUnauthorized, got.status, got.body)
 	})
 }
