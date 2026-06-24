@@ -12,3 +12,4 @@
 | 008 | 2026-06-23 | Remove the memory adapter, ship PostgreSQL-only | complete | Dropped the in-memory tier and `--store` toggle (PostgreSQL-only, `--database-url` required) and adopted mockery for repository test doubles — PR #9 merged (`8a46286`). |
 | 009 | 2026-06-23 | UX/completeness review before declaring the template inheritable | complete | A 3-agent first-time-integrator review found 8 sharp edges; all fixed and merged (PRs #11 + #12 `598d130`), and the container-backed integration suite now runs in CI, proven on `ubuntu-latest`. |
 | 010 | 2026-06-24 | Address independent security review findings | complete | Remediated all three Codex findings as separate squash PRs — API keys hashed at rest (#13), `GET /todos` keyset-paginated (#14), sqlc binary integrity-pinned (#15). |
+| 011 | 2026-06-24 | Finalize the repo | in-progress | Finalizing the template repo; concrete scope TBD pending the user's request. |
