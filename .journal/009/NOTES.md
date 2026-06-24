@@ -27,3 +27,62 @@ Plan: rough — orient on the template as an adopter would (README, DELETE_ME,
 quickstart, docs, layout, naming, flags, errors), inventory rough edges and gaps
 against "ready to inherit," then collaborate with the user on what's in scope
 before doing substantive work. Await the user's actual review direction.
+
+## 2026-06-23 20:18 — Integrator UX review workflow complete
+Ran the review as a workflow (user-directed): 3 parallel first-time-integrator
+passes (identical prompt, Opus 4.8, high effort) → 1 dedupe/rank synthesis agent.
+15 raw findings → 8 ranked. Workflow run `wf_54e1a5ea-2a1`. Themes: stale
+upstream-template docs/wiring, and copy-pasteable commands that fail on first run.
+All fixes are small text-level edits; no design changes. Returned the ranked list
+to the user for triage; awaiting which to act on. Ranked findings:
+1. (high, 3x) README:290 + moon.yml:191-192 claim CI workflows are `.disabled` —
+   they're all active (6 live workflows). Reword to "CI active; only container
+   integration suite excluded via runInCI:false".
+2. (med, 2x) Documented `serve`/`docker run` smoke-tests fail instantly —
+   `--database-url` is required (config.go:162). CONTRIBUTING.md:45-46 + README
+   `docker run` example. Supply the URL or annotate the DB prereq.
+3. (med, 2x) "Adding a resource" omits sqlc.yaml second `sql:` block + sqlc-check
+   sed (moon.yml:134) + mockery-check dir list (moon.yml:174) edits a 2nd PG
+   resource needs; new gen layers silently skipped + escape drift guards.
+4. (med, 3x) moon.yml:48 releaseConfig fileGroup globs nonexistent
+   `.github/workflows.disabled/**` → release-workflow edits don't invalidate
+   root:check. Point at real `.github/workflows/`.
+5. (med, 2x) DELETE_ME.md cleanup checklist never mentions the Meigma agent-session
+   tooling (.session.md, AGENTS.md/CLAUDE.md, .agents/skills, scaffold/.journal);
+   CLAUDE.md hard-fails if .session.md removed. Add a keep/remove checklist item.
+6. (low, 1x) .gitignore:6 ignores `.agents/` but `.agents/skills/**` is committed →
+   new files there silently untracked. Scope the ignore.
+7. (low, 2x) todo authz defines ActionDelete (`todo:delete`) in actions.go:40,48 +
+   policy.cedar + README, but no DELETE route in handler.go. Drop it or comment it.
+8. (low, 1x) Docs mix `moon run root:<task>` and bare `moon run <task>`
+   (README:499, DELETE_ME:92-93). Pick one form.
+
+## 2026-06-23 21:05 — Plan approved; two PRs opened
+User had me probe the "needs a Docker-capable runner" rationale (finding 1) — it's
+false: ci.yml runs `moon ci` on ubuntu-latest (Docker preinstalled). Real cause the
+integration suite is excluded is `runInCI: false` on the test-integration moon task.
+User asked for a plan covering all 8 findings + removing that runInCI limitation.
+Plan approved (`~/.claude/plans/please-propose-a-plan-joyful-nygaard.md`). Decision:
+drop the orphaned ActionDelete (user-confirmed). Split into two PRs off master:
+- **PR #11** `test(ci): run the container-backed integration suite in CI` (branch
+  `ci/run-integration-tests`): moon.yml runInCI false→true on test-integration,
+  reword the false `.disabled` claims (README + moon.yml comment), fix the dead
+  `releaseConfig` glob (`.github/workflows.disabled/**` → `.github/workflows/release*.yml`).
+  Local: root:check green w/o Docker; `moon task root:test-integration` = Runs in CI: Yes;
+  test-integration green vs real postgres (11s).
+- **PR #12** `docs: fix first-run commands and document resource/agent wiring` (branch
+  `docs/template-onboarding-polish`): findings 2,3,5,6,7,8 — CONTRIBUTING/README first-run
+  commands, adding-a-resource sqlc/drift-guard callout, DELETE_ME session-tooling item,
+  .gitignore `.agents/` un-ignore, drop ActionDelete (actions.go+policy.cedar+README),
+  `root:` prefix standardization. root:check + test-integration green; .agents probe ok.
+
+**CI gotcha found (not yet resolved):** PR #11's `ci` check "passed" in 53s but was a
+NO-OP — `moon ci` logs "No tasks affected by changed files." moon ci only runs tasks
+whose `inputs` globs are touched; moon.yml/README aren't inputs of any task, so it ran
+nothing — including test-integration. PR #12 changes .go files (so moon ci runs
+build/lint/test) but is based off master WITHOUT the flip, so test-integration stays
+gated there too. Net: the flip is correct + locally proven, but **test-integration has
+NOT yet run on a GitHub runner.** Clean proof path: merge #11 → rebase #12 onto new
+master → #12's CI (Go files affected + flip now present) exercises test-integration on
+ubuntu-latest. READMEs touch disjoint regions so the rebase is conflict-free. Awaiting
+user decision on merge order / whether to force-prove now.
