@@ -86,3 +86,25 @@ NOT yet run on a GitHub runner.** Clean proof path: merge #11 → rebase #12 ont
 master → #12's CI (Go files affected + flip now present) exercises test-integration on
 ubuntu-latest. READMEs touch disjoint regions so the rebase is conflict-free. Awaiting
 user decision on merge order / whether to force-prove now.
+
+## 2026-06-23 21:35 — Both PRs merged; CI enablement proven on the runner
+User chose "merge #11, rebase #12". Executed:
+- Merged **PR #11** (squash `c9a6bbf`). master fast-forwarded; #11 branch/worktree removed.
+- Rebased **PR #12** onto new master (README regions disjoint → conflict-free), force-pushed.
+- **Proof obtained:** #12's CI run (commit af268a2 — has the flip in base + .go changes)
+  executed `root:test-integration` on ubuntu-latest: `internal/integration ok 13.966s`,
+  "Tasks: 15 completed" (vs the 0-task no-op of #11's config-only run). testcontainers
+  works on GitHub's hosted runner; the integration suite genuinely runs in CI now.
+- **Kusari finding on #12:** flagged literal `app:app` creds in the new docker-run example
+  as normalizing hardcoded credentials. Fixed → `<user>:<password>@host.docker.internal:5432/<db>`
+  placeholders (the self-contained "Running with PostgreSQL" block keeps real creds it
+  creates). Re-scan: Kusari pass; all checks CLEAN.
+- Merged **PR #12** (squash `598d130`). master fast-forwarded to `598d130`; branch/worktree
+  removed. Only `master` + `journal/jmgilman` worktrees remain.
+
+**Outcome:** all 8 review findings resolved on master; the container-backed integration
+suite runs in CI and is proven on ubuntu-latest. Template is in good shape for inheritance.
+**Lesson:** `moon ci` runs only tasks whose `inputs` globs are touched — a config/docs-only
+change (like the runInCI flip itself) triggers nothing, so enabling a CI task isn't
+self-proving; you need a PR that touches the task's inputs to exercise it on the runner.
+Session work complete; ready for session-close when the user is.
