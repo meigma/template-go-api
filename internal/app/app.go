@@ -32,6 +32,10 @@ import (
 // in-process limiter evicts it, bounding memory under churning client keys.
 const rateLimiterIdleTTL = 10 * time.Minute
 
+// serviceName is the OpenTelemetry service.name reported by traces. It is a
+// default; OTEL_SERVICE_NAME or OTEL_RESOURCE_ATTRIBUTES override it.
+const serviceName = "template-go-api"
+
 // App is a fully wired API server ready to Run.
 type App struct {
 	server        *http.Server
@@ -44,6 +48,9 @@ type App struct {
 	// rateLimiter is the in-process rate limiter whose janitor goroutine is
 	// stopped during graceful shutdown. It is nil when rate limiting is disabled.
 	rateLimiter *ratelimit.InMemory
+	// traceShutdown flushes and shuts down the OpenTelemetry tracer provider on
+	// graceful shutdown. It is a no-op when tracing is disabled.
+	traceShutdown func(context.Context) error
 }
 
 // Option configures how New wires the application.
@@ -106,6 +113,17 @@ func New(
 
 	rateLimiter, installRateLimit := buildRateLimiter(cfg, logger)
 
+	// Configure tracing before serving so the global provider is in place when
+	// requests (and their pgx queries) start producing spans.
+	traceShutdown, err := observability.NewTracerProvider(ctx, observability.TracingConfig{
+		Enabled:        cfg.TracingEnabled,
+		ServiceName:    serviceName,
+		ServiceVersion: version,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init tracing: %w", err)
+	}
+
 	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
 	// dedicated metrics server (below) serves it off the API surface.
 	serveMetricsInline := cfg.MetricsAddr == ""
@@ -121,6 +139,7 @@ func New(
 		// injected repository (tests) contributes none, so /readyz is always ready.
 		Readiness:        readiness,
 		Register:         registerResources(service),
+		Tracing:          cfg.TracingEnabled,
 		InstallRateLimit: installRateLimit,
 		InstallAuthz:     installAuthz,
 		FinalizeAuthz:    finalizeAuthz,
@@ -154,6 +173,7 @@ func New(
 		grace:         cfg.ShutdownGrace,
 		pool:          pool,
 		rateLimiter:   rateLimiter,
+		traceShutdown: traceShutdown,
 	}, nil
 }
 
@@ -170,7 +190,11 @@ func resolveStore(
 		return injected, nil, nil, nil
 	}
 
-	pool, err := postgres.Connect(ctx, postgres.Config{URL: cfg.DatabaseURL, MaxConns: cfg.DBMaxConns})
+	pool, err := postgres.Connect(ctx, postgres.Config{
+		URL:      cfg.DatabaseURL,
+		MaxConns: cfg.DBMaxConns,
+		Tracing:  cfg.TracingEnabled,
+	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("connect postgres: %w", err)
 	}

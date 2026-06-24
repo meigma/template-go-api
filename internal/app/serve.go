@@ -33,6 +33,8 @@ func (a *App) Run(ctx context.Context) error {
 	defer a.closePool(ctx)
 	// Stop the in-process rate limiter's janitor goroutine on every exit path.
 	defer a.stopRateLimiter(ctx)
+	// Flush and shut down the tracer provider on every exit path.
+	defer a.shutdownTracing(ctx)
 
 	servers := a.servers()
 	serveErr := make(chan error, len(servers))
@@ -104,4 +106,24 @@ func (a *App) stopRateLimiter(ctx context.Context) {
 
 	a.logger.InfoContext(ctx, "stopping rate limiter")
 	a.rateLimiter.Stop()
+}
+
+// shutdownTracing flushes and shuts down the tracer provider when tracing is
+// enabled. It is deferred in Run so it executes on every exit path. The flush
+// runs on a fresh, grace-bounded context because Run's context is already
+// cancelled by the time shutdown begins, and an already-cancelled context would
+// abandon the final span export. It is a no-op when tracing is disabled.
+func (a *App) shutdownTracing(ctx context.Context) {
+	if a.traceShutdown == nil {
+		return
+	}
+
+	a.logger.InfoContext(ctx, "shutting down tracer provider")
+
+	flushCtx, cancel := context.WithTimeout(context.Background(), a.grace)
+	defer cancel()
+
+	if err := a.traceShutdown(flushCtx); err != nil {
+		a.logger.ErrorContext(ctx, "tracer provider shutdown failed", slog.Any("error", err))
+	}
 }

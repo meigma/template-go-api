@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,6 +17,10 @@ type Config struct {
 	URL string
 	// MaxConns caps the pool size. Zero leaves pgx's default in place.
 	MaxConns int32
+	// Tracing installs the OpenTelemetry pgx query tracer on the pool so each
+	// query becomes a child span of the request. It uses the global tracer
+	// provider; leave it false to add no tracing overhead.
+	Tracing bool
 }
 
 // Connect parses cfg, applies pool tuning, and opens a connection pool,
@@ -28,6 +33,12 @@ func Connect(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	}
 	if cfg.MaxConns > 0 {
 		poolCfg.MaxConns = cfg.MaxConns
+	}
+	if cfg.Tracing {
+		// Trace every query as a span under the active request span. The tracer
+		// resolves the global tracer provider at query time, so it is inert until
+		// a real provider is installed.
+		poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)

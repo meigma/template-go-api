@@ -9,10 +9,19 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/meigma/template-go-api/internal/adapter/http/middleware"
 	"github.com/meigma/template-go-api/internal/adapter/http/problem"
 	"github.com/meigma/template-go-api/internal/observability"
+)
+
+// Infrastructure route paths. They are raw chi routes outside the Huma API and
+// the OpenAPI spec, and are excluded from tracing.
+const (
+	pathHealthz = "/healthz"
+	pathReadyz  = "/readyz"
+	pathMetrics = "/metrics"
 )
 
 // RouterDeps carries the dependencies needed to assemble the HTTP handler.
@@ -39,6 +48,12 @@ type RouterDeps struct {
 	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
 	Register Registrar
+	// Tracing wraps the handler with the OpenTelemetry HTTP server-span
+	// instrumentation (otelhttp) and installs the span-naming Huma middleware.
+	// The infrastructure routes (/healthz, /readyz, /metrics) are filtered out so
+	// health checks and metrics scrapes do not generate spans. False adds no
+	// tracing overhead.
+	Tracing bool
 	// InstallRateLimit installs the rate-limit Huma middleware on the API. Like
 	// InstallAuthz it MUST run before the resource operations are registered (Huma
 	// snapshots the middleware stack per operation at registration), and it runs
@@ -103,12 +118,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 	})
 
 	api := NewAPI(mux, deps.Version)
-	// The rate-limit and authn/authz Huma middleware are installed BEFORE the
-	// operations are registered: Huma bakes the API's middleware stack into each
-	// operation at registration time, so middleware added afterward would never
-	// run. Rate limiting is installed first so it runs outermost — an over-limit
-	// request is rejected before authentication runs. Each is a no-op when its
-	// feature is disabled.
+	// The tracing, rate-limit, and authn/authz Huma middleware are installed
+	// BEFORE the operations are registered: Huma bakes the API's middleware stack
+	// into each operation at registration time, so middleware added afterward
+	// would never run. The span namer is installed first so it runs within the
+	// otelhttp server span; rate limiting next so an over-limit request is
+	// rejected before authentication runs. Each is a no-op when its feature is
+	// disabled.
+	if deps.Tracing {
+		api.UseMiddleware(observability.TraceSpanNamer)
+	}
 	if deps.InstallRateLimit != nil {
 		deps.InstallRateLimit(api)
 	}
@@ -129,7 +148,26 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Infrastructure routes stay raw chi and are excluded from the spec.
 	mountInfra(mux, deps.Metrics, deps.Readiness, deps.ServeMetricsEndpoint)
 
+	if deps.Tracing {
+		// Wrap the whole handler in the OpenTelemetry HTTP server span, extracting
+		// any propagated trace context. The filter excludes the infrastructure
+		// routes so health checks and metrics scrapes are not traced.
+		return otelhttp.NewHandler(mux, "http.server", otelhttp.WithFilter(traceableRequest))
+	}
+
 	return mux
+}
+
+// traceableRequest reports whether a request should be traced. The
+// infrastructure routes (/healthz, /readyz, /metrics) are excluded so routine
+// health checks and metrics scrapes do not flood the trace backend.
+func traceableRequest(r *http.Request) bool {
+	switch r.URL.Path {
+	case pathHealthz, pathReadyz, pathMetrics:
+		return false
+	default:
+		return true
+	}
 }
 
 func mountInfra(
@@ -138,10 +176,10 @@ func mountInfra(
 	readiness []ReadinessCheck,
 	serveMetrics bool,
 ) {
-	mux.Get("/healthz", handleHealthz)
-	mux.Get("/readyz", handleReadyz(readiness))
+	mux.Get(pathHealthz, handleHealthz)
+	mux.Get(pathReadyz, handleReadyz(readiness))
 	if serveMetrics {
-		mux.Handle("/metrics", metrics.Handler())
+		mux.Handle(pathMetrics, metrics.Handler())
 	}
 }
 

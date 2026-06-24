@@ -29,6 +29,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.True(t, cfg.RateLimitEnabled, "rate limiting is enabled by default")
 	assert.InDelta(t, defaultRateLimitRPS, cfg.RateLimitRPS, 0.0001)
 	assert.Equal(t, defaultRateLimitBurst, cfg.RateLimitBurst)
+	assert.False(t, cfg.TracingEnabled, "tracing is opt-in (needs an external collector)")
 }
 
 func TestLoadAuthzFromFlags(t *testing.T) {

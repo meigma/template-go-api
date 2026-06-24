@@ -76,6 +76,48 @@ func TestMetricsEndpointOmittedWhenServedSeparately(t *testing.T) {
 	assert.Equal(t, http.StatusOK, get(t, srv, "/healthz").status)
 }
 
+// TestRouterWithTracingServesRequests verifies that enabling tracing wraps the
+// handler with the otelhttp server-span instrumentation without breaking
+// routing: infra routes still serve normally.
+func TestRouterWithTracingServesRequests(t *testing.T) {
+	t.Parallel()
+
+	discard := observability.NewLogger(io.Discard, slog.LevelError, "json")
+	handler := NewRouter(RouterDeps{
+		Logger:               discard,
+		Metrics:              observability.NewMetrics(),
+		ServeMetricsEndpoint: true,
+		Version:              "test",
+		RequestTimeout:       testRequestTimeout,
+		Tracing:              true,
+		Register:             nil,
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	assert.Equal(t, http.StatusOK, get(t, srv, "/healthz").status)
+	assert.Equal(t, http.StatusOK, get(t, srv, "/metrics").status)
+}
+
+// TestTraceableRequest checks that the infrastructure routes are excluded from
+// tracing while resource routes are traced.
+func TestTraceableRequest(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"/healthz":     false,
+		"/readyz":      false,
+		"/metrics":     false,
+		"/v1/todos":    true,
+		"/v1/todos/42": true,
+	}
+	for path, want := range cases {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		assert.Equalf(t, want, traceableRequest(req), "traceableRequest(%q)", path)
+	}
+}
+
 // TestNewMetricsHandler verifies the dedicated metrics handler serves /metrics
 // and nothing else.
 func TestNewMetricsHandler(t *testing.T) {
