@@ -191,6 +191,7 @@ func TestMiddlewareFailsClosedOnLoadError(t *testing.T) {
 
 	contribution := authz.Contribution{
 		Policies: []byte(attrPolicy),
+		Types:    []string{"Todo"},
 		Resolver: func(ctx context.Context, _ authz.Principal) authz.EntityResolver {
 			return &failingResolver{ctx: ctx}
 		},
@@ -244,4 +245,51 @@ func TestMiddlewareDisabledIsPassThrough(t *testing.T) {
 
 	resp := api.Get("/undeclared")
 	assert.Equal(t, http.StatusNoContent, resp.Code)
+}
+
+// idInput binds the {id} path parameter so the route is matched with a path
+// value the authz middleware can read via ctx.Param.
+type idInput struct {
+	ID string `path:"id"`
+}
+
+func TestMiddlewareBindsURLIDToResource(t *testing.T) {
+	t.Parallel()
+
+	// This policy permits the action only on the specific instance Todo::"42",
+	// so an Allow proves the middleware bound the {id} path value into
+	// Request.Resource (Todo::"<id>") — with no entity load.
+	const instancePolicy = `permit (
+    principal,
+    action == Action::"todo:read",
+    resource == Todo::"42"
+);`
+
+	authorizer, err := authz.New([]authz.Contribution{{Policies: []byte(instancePolicy)}})
+	require.NoError(t, err)
+
+	authn := mocks.NewAuthenticator(t)
+	authn.EXPECT().Authenticate(mock.Anything).Return(user("alice"), nil)
+
+	_, api := humatest.New(t)
+	logger := slog.New(slog.DiscardHandler)
+	authz.NewMiddleware(api, authn, authorizer, logger, true).Install()
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-item",
+		Method:      http.MethodGet,
+		Path:        "/todos/{id}",
+		Metadata:    authz.Require(actionRead(), "id"),
+	}, func(_ context.Context, _ *idInput) (*struct{}, error) {
+		return &struct{}{}, nil
+	})
+
+	// The matching instance is allowed: the path id resolved to Todo::"42".
+	allowed := api.Get("/todos/42")
+	assert.Equal(t, http.StatusNoContent, allowed.Code, "the bound instance Todo::\"42\" must be allowed")
+
+	// A different instance is denied: the path id resolved to Todo::"99", which
+	// the instance policy does not permit, proving the binding is per-request.
+	denied := api.Get("/todos/99")
+	assert.Equal(t, http.StatusForbidden, denied.Code, "a non-matching instance must be denied")
 }

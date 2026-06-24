@@ -65,7 +65,12 @@ func newGetter(ctx context.Context, p Principal, contributions []Contribution) *
 			continue
 		}
 		resolver := c.Resolver(g.ctx, p)
-		for _, t := range resolver.Types() {
+		// Route by the contribution's statically declared Types, not the
+		// resolver's runtime Types(), so a slice resolver cannot claim a type it
+		// did not declare (and [New] rejected) and thereby shadow the principal
+		// resolver. Contributions are applied in order, but [New] guarantees the
+		// keys are disjoint, so order does not affect routing.
+		for _, t := range c.Types {
 			g.byType[t] = resolver
 		}
 	}

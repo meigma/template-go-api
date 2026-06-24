@@ -115,6 +115,17 @@ func pathOperations(item *huma.PathItem) []*huma.Operation {
 	return ops
 }
 
+// DocumentSecurity stamps the security scheme and the per-operation security
+// requirements onto api's OpenAPI document without installing the enforcing
+// middleware. It is the server-less export path's counterpart to Install: the
+// composition root passes it to the OpenAPI exporter so the committed spec
+// advertises the same protection the running server enforces. Like Install, it
+// must run after the operations are registered so ApplySecurity sees them.
+func DocumentSecurity(api huma.API) {
+	RegisterSecurityScheme(api)
+	ApplySecurity(api)
+}
+
 // RegisterSecurityScheme declares the API-key security scheme on api's OpenAPI
 // document, so the Security requirement Require advertises resolves to a defined
 // scheme. The composition root calls it once when authorization is enabled.

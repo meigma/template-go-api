@@ -20,6 +20,14 @@ type Contribution struct {
 	// Action::"todo:read"). They are recorded for discovery and validation; the
 	// engine does not require them to evaluate.
 	Actions []types.EntityUID
+	// Types lists the Cedar entity type names this slice's resolver owns (for
+	// example "Todo"). It is the authoritative routing key: [New] validates that
+	// no two contributions claim the same type and that a slice never claims a
+	// reserved principal type, and the composite getter routes by it so a slice
+	// resolver can never shadow the always-present principal resolver. A slice
+	// with a Resolver must declare the types it owns; a slice contributing only
+	// coarse policies leaves it empty.
+	Types []string
 	// Resolver builds this slice's entity resolver, bound to a request. It is nil
 	// for slices that contribute only coarse policies needing no entity loads.
 	Resolver ResolverFactory

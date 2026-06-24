@@ -28,10 +28,19 @@ func NewAPI(mux chi.Router, version string) huma.API {
 
 // SpecYAML builds the API on a throwaway router, applies register, and returns the
 // OpenAPI 3.0.3 specification as YAML, without binding a network listener.
-func SpecYAML(version string, register Registrar) ([]byte, error) {
+//
+// finalize, when non-nil, runs after the operations are registered and before
+// the document is serialized. The composition root passes the authz hook here so
+// the server-less export carries the same security scheme and per-operation
+// requirements the running server installs — keeping the committed spec in step
+// with the enforced protection. It is nil when authorization is disabled.
+func SpecYAML(version string, register Registrar, finalize func(huma.API)) ([]byte, error) {
 	api := NewAPI(chi.NewMux(), version)
 	if register != nil {
 		register(api)
+	}
+	if finalize != nil {
+		finalize(api)
 	}
 
 	spec, err := api.OpenAPI().DowngradeYAML()

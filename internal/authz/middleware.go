@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/cedar-policy/cedar-go"
+	"github.com/cedar-policy/cedar-go/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -60,20 +61,38 @@ func NewMiddleware(
 	}
 }
 
-// Install registers the authn and authz middleware on the API, declares the
-// API-key security scheme, and stamps the OpenAPI Security requirement onto every
-// operation that Require declared. It must run after the operations are
-// registered so ApplySecurity sees them. It is a no-op when the middleware is
-// disabled, so all operations run unauthenticated and unauthorized — the default
-// that keeps untagged routes (and their tests) working until they are tagged.
+// Install registers the authn and authz middleware on the API. It MUST run
+// before the resource operations are registered: Huma snapshots the API's
+// middleware stack into each operation at huma.Register time, so middleware added
+// afterward never runs for those operations. It is a no-op when the middleware is
+// disabled, so all operations run unauthenticated and unauthorized — the escape
+// hatch that bypasses authorization entirely.
+//
+// OpenAPI security stamping is deliberately NOT done here, because it must run
+// after registration (ApplySecurity needs the operations present); the
+// composition root calls Finalize for that, or the server-less exporter calls
+// DocumentSecurity directly.
 func (m *Middleware) Install() {
 	if !m.enabled {
 		return
 	}
 
-	RegisterSecurityScheme(m.api)
-	ApplySecurity(m.api)
 	m.api.UseMiddleware(m.authenticate, m.authorize)
+}
+
+// Finalize stamps the API-key security scheme and the per-operation security
+// requirements onto the OpenAPI document. It MUST run after the resource
+// operations are registered (ApplySecurity iterates the registered paths). It is
+// a no-op when the middleware is disabled, so a bypassed API advertises no
+// security it does not enforce. Pairing Install (pre-register) with Finalize
+// (post-register) is required because Huma fixes an operation's middleware at
+// registration time while its OpenAPI metadata can be mutated afterward.
+func (m *Middleware) Finalize() {
+	if !m.enabled {
+		return
+	}
+
+	DocumentSecurity(m.api)
 }
 
 // authenticate runs the configured Authenticator and stores the resulting
@@ -151,9 +170,6 @@ const (
 func (m *Middleware) evaluate(ctx huma.Context, principal Principal, decl *declaration) outcome {
 	getter := newGetter(ctx.Context(), principal, m.authorizer.Contributions())
 
-	// The resource is bound at the type level (the action's resource segment by
-	// convention). Instance binding from decl.idParam is not yet implemented;
-	// idParam is recorded on the declaration for that step.
 	req := cedar.Request{
 		Principal: principal.UID,
 		Action:    decl.action,
@@ -184,12 +200,29 @@ func (m *Middleware) evaluate(ctx huma.Context, principal Principal, decl *decla
 	return decisionDeny
 }
 
-// resourceFor builds the Cedar resource entity for decl. It returns a type-level
-// resource derived from the action's resource segment; instance binding that
-// reads decl.idParam from ctx to build an instance-level Type::"<id>" is not yet
-// implemented.
-func resourceFor(decl *declaration, _ huma.Context) cedar.EntityUID {
-	return resourceTypeFromAction(decl.action)
+// resourceFor builds the Cedar resource entity for decl. When the declaration
+// binds a path parameter (Require(action, idParam)), the resource is the
+// instance Type::"<id>", read straight from the matched route's path value — no
+// database load — so policies can decide on the specific instance. Without a
+// bound parameter (collection operations), the resource is the type-level entity
+// derived from the action's resource segment.
+//
+// The route is matched before the Huma middleware runs, so ctx.Param(idParam)
+// returns the matched path value here. An empty value (a missing or unmatched
+// parameter) falls back to the type-level resource rather than minting a
+// Type::"" instance, keeping a misconfiguration coarse rather than nonsensical.
+func resourceFor(decl *declaration, ctx huma.Context) cedar.EntityUID {
+	resourceType := resourceTypeFromAction(decl.action)
+	if decl.idParam == "" {
+		return resourceType
+	}
+
+	id := ctx.Param(decl.idParam)
+	if id == "" {
+		return resourceType
+	}
+
+	return cedar.NewEntityUID(resourceType.Type, types.String(id))
 }
 
 // principal returns the request principal, defaulting to anonymous when the

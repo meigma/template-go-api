@@ -62,6 +62,10 @@ func New(contributions []Contribution, opts ...Option) (*Authorizer, error) {
 		opt(&cfg)
 	}
 
+	if err := validateTypeOwnership(contributions); err != nil {
+		return nil, err
+	}
+
 	base, err := loadBasePolicies(cfg.policyDir)
 	if err != nil {
 		return nil, err
@@ -91,6 +95,48 @@ func New(contributions []Contribution, opts ...Option) (*Authorizer, error) {
 	all := append([]Contribution{principalContribution()}, contributions...)
 
 	return &Authorizer{policies: merged, contributions: all}, nil
+}
+
+// validateTypeOwnership enforces, at construction, that entity-type ownership is
+// unambiguous across the merged engine. It is the fail-fast guard behind the
+// composite getter's single-owner-per-type routing:
+//   - No slice may claim a reserved principal type (PrincipalType/AnonymousType),
+//     so a slice resolver can never shadow the always-present principal resolver.
+//   - No two slices may claim the same type, so a lookup routes to exactly one
+//     resolver and a type's facts have a single source of truth.
+//
+// A misconfigured contribution set therefore fails startup rather than silently
+// shadowing facts or the principal at request time.
+func validateTypeOwnership(contributions []Contribution) error {
+	reservedNames := reservedTypes()
+	reserved := make(map[string]struct{}, len(reservedNames))
+	for _, t := range reservedNames {
+		reserved[t] = struct{}{}
+	}
+
+	owner := make(map[string]int)
+	for i, c := range contributions {
+		for _, t := range c.Types {
+			if _, isReserved := reserved[t]; isReserved {
+				return fmt.Errorf(
+					"contribution %d claims reserved principal type %q: it is owned by the base principal resolver and cannot be overridden",
+					i,
+					t,
+				)
+			}
+			if prev, dup := owner[t]; dup {
+				return fmt.Errorf(
+					"contributions %d and %d both claim entity type %q: each Cedar entity type must be owned by exactly one slice",
+					prev,
+					i,
+					t,
+				)
+			}
+			owner[t] = i
+		}
+	}
+
+	return nil
 }
 
 // loadBasePolicies returns the base policy source: the .cedar files concatenated

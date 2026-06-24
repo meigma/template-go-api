@@ -11,18 +11,32 @@ import (
 // Role::"<name>", so policies can test `principal in Role::"…"` with no load.
 const RoleType types.EntityType = "Role"
 
+// PrincipalType is the Cedar entity type of an authenticated caller. The API-key
+// authenticator mints principals of this type; it is reserved so no slice
+// resolver can shadow the always-present principal resolver.
+const PrincipalType types.EntityType = "User"
+
 // RolesClaim is the claim key the principal resolver reads the caller's roles
 // from, and the key an Authenticator writes them under, so role membership is
 // projected onto the principal entity's parents for `principal in Role::"…"`.
 const RolesClaim types.String = "roles"
 
+// reservedTypes returns the Cedar entity types owned by the base principal
+// resolver: the authenticated and anonymous principal types. They can never be
+// claimed by a slice contribution, so a slice resolver cannot shadow the
+// principal resolver in the composite getter (see [New] and [newGetter]). Role
+// entities carry no attributes and need no resolver, so Role is not listed here.
+func reservedTypes() []string {
+	return []string{string(PrincipalType), string(AnonymousType)}
+}
+
 // principalContribution is the always-present base contribution that resolves
-// the authenticated principal entity from its claims. It owns the principal
-// entity types so the composite getter routes principal lookups here, letting
-// cross-cutting policies (base.cedar's admin override) and slice policies test
-// principal group membership without any database load.
+// the authenticated principal entity from its claims. It owns the reserved
+// principal entity types so the composite getter routes principal lookups here,
+// letting cross-cutting policies (base.cedar's admin override) and slice policies
+// test principal group membership without any database load.
 func principalContribution() Contribution {
-	return Contribution{Resolver: newPrincipalResolver}
+	return Contribution{Types: reservedTypes(), Resolver: newPrincipalResolver}
 }
 
 // principalResolver materializes the request's principal entity (and its role

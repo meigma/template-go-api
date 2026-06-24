@@ -41,6 +41,7 @@ func TestGetterRoutesAndCaches(t *testing.T) {
 	todoUID := types.NewEntityUID("Todo", "1")
 	resolver := &recordingResolver{typ: "Todo", uid: todoUID}
 	g := newGetter(context.Background(), Anonymous(), []Contribution{{
+		Types: []string{"Todo"},
 		Resolver: func(ctx context.Context, _ Principal) EntityResolver {
 			resolver.sinkOf = ctx
 
@@ -63,6 +64,7 @@ func TestGetterCachesMisses(t *testing.T) {
 
 	resolver := &recordingResolver{typ: "Todo", uid: types.NewEntityUID("Todo", "1")}
 	g := newGetter(context.Background(), Anonymous(), []Contribution{{
+		Types: []string{"Todo"},
 		Resolver: func(ctx context.Context, _ Principal) EntityResolver {
 			resolver.sinkOf = ctx
 
@@ -92,6 +94,7 @@ func TestGetterCapturesFirstLoadError(t *testing.T) {
 	first := errors.New("first failure")
 	resolver := &recordingResolver{typ: "Todo", err: first}
 	g := newGetter(context.Background(), Anonymous(), []Contribution{{
+		Types: []string{"Todo"},
 		Resolver: func(ctx context.Context, _ Principal) EntityResolver {
 			resolver.sinkOf = ctx
 
