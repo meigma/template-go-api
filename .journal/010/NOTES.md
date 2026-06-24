@@ -93,3 +93,54 @@ only `master` + `journal/jmgilman` remain; `git ls-files .journal` empty on mast
 
 Finding 2/3 COMPLETE. Findings 1 and 3 not yet shared by the user — session stays
 open for them.
+
+## 2026-06-24 08:42 — Finding 3/3: unbounded GET /todos → keyset pagination (PR #14 open)
+Codex finding 3 of 3 (Medium, CWE-400/770): `GET /todos` returned the whole table
+(no limit/cursor) — a user role could drive unbounded DB/memory/response work.
+This is the deferred "pagination" seam (TARGET_SHAPE); built it as the reference.
+
+Three Explore agents mapped HTTP/contract, domain/SQL/sqlc, and config/authz/Huma
+layers. Two user-chosen decisions (AskUserQuestion): **keyset/cursor pagination**
+(over `(created_at, id)`) and **Go constants** for default(20)/max(100) page size
+(max doubles as the static Huma `maximum` tag; a unit test couples them).
+
+Design (plan: `~/.claude/plans/here-is-the-first-logical-hartmanis.md`, approved):
+- New `internal/todo/page.go`: `Cursor`, `PageQuery`, `PageResult`, consts,
+  `ErrInvalidCursor`. Port `List(ctx, PageQuery) (PageResult, error)`.
+- **Hexagonal:** opaque cursor is transport-only (httpapi `cursor.go` encodes/
+  decodes base64url JSON `{t,id}`); port speaks structured types; the **+1
+  over-fetch** to detect a next page lives in the adapters (repo + todotest fake).
+  Service clamps limit to [1,Max] (defense even for non-HTTP callers).
+- Keyset SQL: `WHERE ($1::timestamptz IS NULL OR (created_at,id) > ($1,$2)) ORDER
+  BY created_at,id LIMIT $3`. sqlc generated `ListTodosParams{AfterCreatedAt
+  *time.Time; AfterID pgtype.UUID; PageLimit int32}` — NOTE: nullable uuid narg →
+  `pgtype.UUID` (no nullable-uuid override), not `*uuid.UUID`. Composite index on
+  `(created_at,id)` added to the 00001 migration (edited in place).
+- Bad cursor → 422: structural failure caught in `decodeCursor` (handler →
+  `huma.Error422`); a non-uuid cursor id caught in the repo → `todo.ErrInvalidCursor`
+  → `toHumaError` → 422. Never a 500.
+- Regenerated sqlc + mockery (List sig) + openapi. Docs: README pagination note +
+  rate-limit-is-future-seam, docs/index, DELETE_ME add-a-resource note.
+
+Files: 2 new (page.go, httpapi/cursor.go) + 18 modified.
+
+GOTCHAS this round:
+- `root:format` is `golangci-lint fmt` (NOT plain gofmt) — it aligns struct tags
+  *within* the backticks. Plain `gofmt -w` was insufficient; ran
+  `proto run golangci-lint -- fmt --config .golangci.yml` (drop `--diff`) to fix.
+- `root:lint`: gosec G115 on `int32(page.Limit)+1` (bounded by clamp) and nilnil on
+  `decodeCursor`'s empty-token `return nil,nil` — both legit, used inline
+  `//nolint:gosec`/`//nolint:nilnil` w/ reasons (repo's existing convention).
+- Compose smoke "24 != 21" scare: the stack **seeds 3 demo todos** (ids 1111/2222/
+  3333) via hack/sql in addition to api_keys — so totals include seeds. No bug;
+  keyset returned all 24 distinct, no overlap. (Remember: compose seeds todos too.)
+
+Verified: `root:check` green (no drift); `test-integration` green vs postgres:17
+(keyset incl. tied-timestamp tiebreak, boundaries, last-page nil, bad-cursor 422);
+compose smoke — no-params capped at 20 + nextCursor (the security property), paged
+all 24 with no overlap, limit 0/101 + bad cursor → 422, limit 100 → 200.
+
+Branch `fix/todo-pagination` → PR #14
+(https://github.com/meigma/template-go-api/pull/14),
+`feat(todo): paginate the list endpoint with keyset cursors`. CI watching. Next:
+merge on green, clean up. Finding 1 still pending from the user.
