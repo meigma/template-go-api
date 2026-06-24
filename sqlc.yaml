@@ -18,6 +18,12 @@ sql:
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         emit_interface: true
+        # Only emit structs for tables/enums referenced by a todo query. The
+        # api_keys table lives in the shared migrations dir (read as the schema)
+        # but is queried by the apikey adapter's hand-written pgx, not sqlc, so
+        # this keeps the todo sqlc package free of an unused ApiKey model and
+        # leaves it untouched whether the api_keys migration is present or not.
+        omit_unused_structs: true
         overrides:
           # ID column maps to the same uuid.UUID the rest of the codebase uses;
           # the adapter converts to/from the domain's string at the boundary.
