@@ -295,3 +295,40 @@ yubikey; squashed at PR time anyway); keep `moon run root:check` green; **Phase 
 existing routes (Phase B tags routes + flips to true); API-key store = hand-written pgx vs
 the api_keys migration (no 2nd sqlc pkg); mockery for the new ports. Awaiting completion →
 human gate before Phase B.
+
+## 2026-06-23 18:06 — Phase A COMPLETE (gate 1); root:check green, independently verified
+Workflow `wf_c627ba40-aa0` done (6 agents). Two commits on `feat/authz-tier`:
+`edc53c1` (implement) + `752a69d` (fix). **I independently re-ran** `go build ./...` +
+`go vet ./...` + `go test ./...` in the worktree → all exit 0, every unit test passes
+(incl. `internal/authz` + `internal/authz/apikey`). The IDE `BrokenImport`/not-in-workspace
+diagnostics are the known `.wt`+go.work false-positive — dismissed. Built: base
+`internal/authz` (Authorizer/PolicySet-merge, Contribution model, Principal+ctx,
+Authenticator seam, lazy request-scoped getter w/ ctx-bound error sink + per-req cache,
+Require/Public declarations, global deny-default middleware w/ 401/403/500 RFC9457,
+always-present principal-resolver projecting role claims→entity parents for the admin
+override, embedded base.cedar), `internal/authz/apikey` (X-API-Key/Bearer Authenticator +
+APIKeyStore port + hand-written pgx postgres adapter), `00002_create_api_keys.sql`
+migration, `--authz-enabled`/`--authz-policy-dir` config, app wiring (empty contribution
+set), mockery doubles for all 3 new ports, focused unit tests. Base authz home finalized
+at `internal/authz` (resolves design open-Q4).
+
+Reviewers (3 lenses): 19 findings, 4 blocker/major = 2 real pairs, BOTH FIXED in `752a69d`:
+(1) `--authz-policy-dir` was a silent no-op → wired `authz.WithPolicyDir` + `loadBasePolicies`
+(fails startup on missing/empty/invalid dir, no silent embedded fallback); (2) `Require()`
+didn't populate OpenAPI `Security` (Metadata is `yaml:"-"`) → added `ApplySecurity(api)` pass
+(post-registration, sets `op.Security`), called from `Install()`, asserted in generated YAML.
+Good minors also fixed: `decisionAllow` was the zero-value (latent fail-open) → reordered so
+zero = `decisionError` + fail-closed default; comment-hygiene (stripped all §/Phase/DELETE_ME
+refs from godoc); `go mod tidy` (cedar-go now direct); `WithPrincipal` wired (was dead);
+Authorize/app/apikey godoc fixes.
+
+CARRY-FORWARD (deferred, surfaced to user):
+- **getter byType overwrite (Phase B)**: a slice resolver owning the principal's entity
+  type (`User`) would shadow the principal resolver → silently break the admin override.
+  MUST handle in Phase B (principal-type precedence / merge resolvers).
+- **sqlc `ApiKey` bleed**: api_keys in the shared migrations dir → sqlc emits an unused
+  `ApiKey` struct into the TODO sqlc package. Harmless/clean per sqlc-check; documented in
+  apikey pkg doc. Accept vs scope-sqlc-to-todo-tables = user call.
+- `--authz-enabled=false` Phase-A default (design §9 updated to note the deferral; Phase B
+  flips to true).
+Branch held local (not pushed); PR at end of phases. PAUSED for gate-1 approval → Phase B.

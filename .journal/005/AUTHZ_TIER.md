@@ -303,8 +303,10 @@ for the default.
 
 ## 9. Config (Viper, `TEMPLATE_GO_API_*` prefix)
 
-- `--authz-enabled` (default `true`) — master switch; `false` bypasses the authz
-  middleware entirely (escape hatch / incremental adoption).
+- `--authz-enabled` (default `true` once routes are tagged; **Phase A ships `false`** so
+  deny-default + still-untagged routes don't 403 the app — Phase B tags routes and flips
+  the default) — master switch; `false` bypasses the authz middleware entirely (escape
+  hatch / incremental adoption).
 - `--authz-policy-dir` (optional) — load `.cedar` files from a directory instead of the
   embedded set (loaded at startup; embedded is the default).
 - (No `--api-keys` flag.) API keys live in the PostgreSQL `api_keys` table, not config —
