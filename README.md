@@ -198,6 +198,9 @@ default.
 | `--db-max-conns` | `TEMPLATE_GO_API_DB_MAX_CONNS` | `0` | maximum PostgreSQL pool connections; `0` uses the driver default |
 | `--authz-enabled` | `TEMPLATE_GO_API_AUTHZ_ENABLED` | `true` | enable the [authorization](#authorization) middleware (deny-by-default); `false` bypasses it entirely |
 | `--authz-policy-dir` | `TEMPLATE_GO_API_AUTHZ_POLICY_DIR` | _(none)_ | directory of `.cedar` files to load instead of the embedded policies; empty uses the embedded set |
+| `--rate-limit-enabled` | `TEMPLATE_GO_API_RATE_LIMIT_ENABLED` | `true` | enable per-client [rate limiting](#rate-limiting); `false` disables throttling entirely |
+| `--rate-limit-rps` | `TEMPLATE_GO_API_RATE_LIMIT_RPS` | `10` | sustained per-client request rate (requests/second) |
+| `--rate-limit-burst` | `TEMPLATE_GO_API_RATE_LIMIT_BURST` | `20` | per-client burst size (token-bucket depth) |
 
 CORS is off until you set origins. Client IP is read from the direct TCP peer
 unless you opt into a trusted proxy header — never from `X-Forwarded-For`
@@ -439,6 +442,34 @@ At runtime there is one merged `PolicySet` over one shared entity space, so a
 policy in one slice can reference shared principal roles (`principal in
 Role::"admin"`) or another slice's entities. Cross-cutting rules and shared
 principal/role types live in the base package's `base.cedar`.
+
+## Rate limiting
+
+The API is rate limited per client out of the box (`--rate-limit-enabled`,
+default true). The limiter is a Huma middleware installed **before**
+authentication, so an over-limit request is rejected with `429 Too Many
+Requests` before it reaches the credential store — protecting the auth path and
+database from anonymous floods. The infrastructure routes (`/healthz`,
+`/readyz`, `/metrics`) bypass Huma and are never limited.
+
+Requests are keyed by **client IP** (the spoof-safe IP the
+[`--trusted-proxy-header`](#configuration) logic resolves), allowing a burst of
+`--rate-limit-burst` and a sustained `--rate-limit-rps` per second (a token
+bucket). A throttled response is RFC 9457 `application/problem+json` and carries
+a `Retry-After` header (whole seconds).
+
+The shipped limiter is **in-process** (`golang.org/x/time/rate`), with per-key
+buckets evicted after an idle period to bound memory. That is the right default
+for a single instance; behind multiple replicas a shared backend keeps the limit
+global. The `ratelimit.Limiter` port is the seam: implement `Allow` over a store
+such as Redis and wire your adapter in `internal/app/app.go` — the middleware and
+key function are unchanged. To limit authenticated callers instead of IPs, swap
+the key function (`adapterhttp.ClientIPKeyFunc`) for one that reads the principal.
+
+> The IETF [RateLimit header fields](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/)
+> (`RateLimit`/`RateLimit-Policy`) are still a draft and map only loosely onto a
+> token bucket, so the template advertises the limit with the stable `Retry-After`
+> header and leaves those headers as a documented enhancement.
 
 ## Testing
 

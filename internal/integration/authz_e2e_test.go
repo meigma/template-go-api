@@ -44,6 +44,11 @@ func e2eServer(ctx context.Context, t *testing.T, databaseURL string) *httptest.
 
 	vp := viper.New()
 	vp.Set("database-url", databaseURL)
+	// Rate limiting is orthogonal here, and its per-IP bucket would be shared
+	// across this suite's rapid requests from one loopback client; disable it so
+	// the authz assertions stay deterministic. Rate limiting is covered by its
+	// own tests in internal/ratelimit.
+	vp.Set("rate-limit-enabled", false)
 	cfg := config.Load(vp)
 	require.NoError(t, cfg.Validate())
 	// Guard the premise of the whole suite: authz must be enabled by default now

@@ -39,6 +39,14 @@ type RouterDeps struct {
 	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
 	Register Registrar
+	// InstallRateLimit installs the rate-limit Huma middleware on the API. Like
+	// InstallAuthz it MUST run before the resource operations are registered (Huma
+	// snapshots the middleware stack per operation at registration), and it runs
+	// BEFORE InstallAuthz so an over-limit request is rejected before
+	// authentication touches the credential store. Nil (or a disabled middleware)
+	// leaves the API unthrottled. The infrastructure routes bypass Huma, so they
+	// are never rate limited.
+	InstallRateLimit func(huma.API)
 	// InstallAuthz installs the authentication/authorization Huma middleware on
 	// the API. It MUST run before the resource operations are registered: Huma
 	// snapshots the API's middleware stack into each operation at registration
@@ -61,12 +69,15 @@ type RouterDeps struct {
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := chi.NewMux()
 
-	// Core middleware, outermost first. Deferred seams (insert here in later
-	// slices): authn/authz and rate limiting.
+	// Core chi middleware, outermost first. The rate-limit and authn/authz
+	// middleware are Huma middleware (installed on the API below), not chi
+	// middleware, so they run only for API operations and never for the
+	// infrastructure routes.
 	//
-	// Client-IP runs first so the request id, access log, and metrics all see
-	// the resolved IP. CORS sits after the access log (so preflight responses are
-	// logged and metered) and is installed only when origins are configured.
+	// Client-IP runs first so the request id, access log, metrics, and the
+	// rate limiter all see the resolved IP. CORS sits after the access log (so
+	// preflight responses are logged and metered) and is installed only when
+	// origins are configured.
 	mux.Use(middleware.ClientIP(deps.TrustedProxyHeader))
 	mux.Use(chimiddleware.RequestID)
 	mux.Use(middleware.Recoverer(deps.Logger))
@@ -92,10 +103,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	})
 
 	api := NewAPI(mux, deps.Version)
-	// The authn/authz Huma middleware is installed BEFORE the operations are
-	// registered: Huma bakes the API's middleware stack into each operation at
-	// registration time, so middleware added afterward would never run. It is a
-	// no-op when authorization is disabled.
+	// The rate-limit and authn/authz Huma middleware are installed BEFORE the
+	// operations are registered: Huma bakes the API's middleware stack into each
+	// operation at registration time, so middleware added afterward would never
+	// run. Rate limiting is installed first so it runs outermost — an over-limit
+	// request is rejected before authentication runs. Each is a no-op when its
+	// feature is disabled.
+	if deps.InstallRateLimit != nil {
+		deps.InstallRateLimit(api)
+	}
 	if deps.InstallAuthz != nil {
 		deps.InstallAuthz(api)
 	}

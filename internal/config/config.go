@@ -30,6 +30,18 @@ const (
 	// box. Operators set it false as an escape hatch to bypass authorization
 	// entirely (incremental adoption or local debugging).
 	defaultAuthzEnabled = true
+	// defaultRateLimitEnabled is true: the API is rate limited out of the box
+	// (per client IP, pre-auth), a secure default that also shields the
+	// credential store from anonymous floods. Operators set it false to disable
+	// throttling entirely.
+	defaultRateLimitEnabled = true
+	// defaultRateLimitRPS is the sustained per-client request rate (requests per
+	// second). It is deliberately generous so local development and the demo
+	// stack are not throttled; tune it down for production.
+	defaultRateLimitRPS = 10.0
+	// defaultRateLimitBurst is the per-client token-bucket depth: how many
+	// requests a client may make in a burst before the sustained rate applies.
+	defaultRateLimitBurst = 20
 )
 
 // Config holds runtime settings for the API server.
@@ -78,6 +90,16 @@ type Config struct {
 	// instead of the embedded set. Empty (the default) uses the embedded
 	// policies.
 	AuthzPolicyDir string
+	// RateLimitEnabled is the rate-limiting master switch. It defaults to true:
+	// the API is throttled per client IP before authentication runs. When false
+	// the rate-limit middleware is inert (pass-through).
+	RateLimitEnabled bool
+	// RateLimitRPS is the sustained per-client request rate, in requests per
+	// second, when rate limiting is enabled.
+	RateLimitRPS float64
+	// RateLimitBurst is the per-client token-bucket depth: the number of requests
+	// a client may make in a burst before the sustained RateLimitRPS applies.
+	RateLimitBurst int
 }
 
 // RegisterFlags declares the server configuration flags on flags. Binding them
@@ -115,6 +137,13 @@ func RegisterFlags(flags *pflag.FlagSet) {
 		"",
 		"directory of .cedar policy files to load instead of the embedded policies; empty uses the embedded set",
 	)
+	flags.Bool(
+		"rate-limit-enabled",
+		defaultRateLimitEnabled,
+		"enable per-client (IP) rate limiting; false disables throttling entirely",
+	)
+	flags.Float64("rate-limit-rps", defaultRateLimitRPS, "sustained per-client request rate (requests per second)")
+	flags.Int("rate-limit-burst", defaultRateLimitBurst, "per-client burst size (token-bucket depth)")
 }
 
 // Load reads the server configuration from vp, applying defaults for unset keys.
@@ -138,6 +167,9 @@ func Load(vp *viper.Viper) Config {
 		DBMaxConns:         vp.GetInt32("db-max-conns"),
 		AuthzEnabled:       vp.GetBool("authz-enabled"),
 		AuthzPolicyDir:     vp.GetString("authz-policy-dir"),
+		RateLimitEnabled:   vp.GetBool("rate-limit-enabled"),
+		RateLimitRPS:       vp.GetFloat64("rate-limit-rps"),
+		RateLimitBurst:     vp.GetInt("rate-limit-burst"),
 	}
 }
 
@@ -161,6 +193,14 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.DatabaseURL) == "" {
 		return errors.New("database-url is required")
 	}
+	if c.RateLimitEnabled {
+		if c.RateLimitRPS <= 0 {
+			return errors.New("rate-limit-rps must be positive when rate limiting is enabled")
+		}
+		if c.RateLimitBurst <= 0 {
+			return errors.New("rate-limit-burst must be positive when rate limiting is enabled")
+		}
+	}
 
 	return nil
 }
@@ -182,4 +222,7 @@ func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("db-max-conns", defaultDBMaxConns)
 	vp.SetDefault("authz-enabled", defaultAuthzEnabled)
 	vp.SetDefault("authz-policy-dir", "")
+	vp.SetDefault("rate-limit-enabled", defaultRateLimitEnabled)
+	vp.SetDefault("rate-limit-rps", defaultRateLimitRPS)
+	vp.SetDefault("rate-limit-burst", defaultRateLimitBurst)
 }
