@@ -346,3 +346,19 @@ exit 0, full `moon run root:check` green (10 tasks). Committed `138d8e9` on
 output, so feature removal is truly surgical (no todo regen needed). AUTHZ_TIER.md §2
 updated to record the decision. Branch now 3 commits (edc53c1, 752a69d, 138d8e9).
 Gate-1's one open item is resolved → ready for full Phase B on approval.
+
+## 2026-06-23 18:23 — Phase B build launched (user: "Proceed with Phase B")
+Launched gated Phase B workflow `implement-authz-phase-b` (run `wf_b958c5e4-a85`, task
+`wyglw2qjs`) on `feat/authz-tier` (reviewBase `138d8e9` so reviewers focus on the Phase B
+diff). Same implement → 3 reviewers → fix → validate structure + guardrails. Phase B scope
+in the prompt: `internal/todo/authz` slice (actions, coarse `policy.cedar` granting a role
+the todo actions + base admin override + a commented attribute-policy example, repo-backed
+fact resolver mapping Todo→entity using EXISTING fields only — no domain change/owner field);
+tag `httpapi` routes via the `todoauthz` alias with `Require(action[,"todoID"])`; implement
+URL-id→Resource binding in the middleware; wire `Contribution(repo)` in app.go; the
+**principal-type precedence fix** (authz.New errors on duplicate entity-type ownership, principal
+type reserved); flip `--authz-enabled` default→true with a new `app.WithAuthenticator` test
+seam + update existing httpapi/app tests to authenticate (NOT weaken authz); ensure the
+server-less OpenAPI export applies Security and refresh/commit the spec (openapi-check).
+Two feasibility items to confirm in-flight: Huma path-param at middleware; cedar-go lazy Get.
+Awaiting completion → gate-2.
