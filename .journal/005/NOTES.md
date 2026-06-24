@@ -362,3 +362,44 @@ seam + update existing httpapi/app tests to authenticate (NOT weaken authz); ens
 server-less OpenAPI export applies Security and refresh/commit the spec (openapi-check).
 Two feasibility items to confirm in-flight: Huma path-param at middleware; cedar-go lazy Get.
 Awaiting completion → gate-2.
+
+## 2026-06-23 18:58 — Phase B COMPLETE (gate 2); green, independently verified
+Workflow `wf_b958c5e4-a85` done (6 agents). Branch `feat/authz-tier` now 6 commits:
+edc53c1, 752a69d, 138d8e9 (phase A + sqlc), then e63902d (precedence fix + URL-id binding +
+install/finalize split), 73370c8 (todo authz slice + route tagging + enable), 299525d (phase
+B review fixes). **I independently re-ran** `go build`/`go vet`/`go test ./...` (all pass),
+confirmed `defaultAuthzEnabled = true`, the committed `docs/docs/openapi.yaml` carries the
+`apiKey` securityScheme + `- apiKey: []` on all 4 todo ops, and full `moon run root:check`
+green (10 tasks). IDE BrokenImport = go.work false-positive, dismissed.
+
+Shipped: `internal/todo/authz` slice (actions `Action::"todo:*"`; coarse `policy.cedar`
+granting `Role::"user"` the todo actions + admin via base + commented attribute-policy
+example; repo-backed lazy fact resolver mapping Todo→entity from EXISTING fields only).
+Routes tagged via `todoauthz` alias; by-id ops bind `{id}`→`Resource = Todo::"<id>"`.
+Contribution wired in app.go. Precedence fix (static `Contribution.Types`; `New` errors on
+duplicate/reserved-type ownership). `--authz-enabled` flipped→true with `app.WithAuthenticator`
+test seam (tests authenticate, authz NOT weakened). OpenAPI export stamps security
+independent of the runtime flag. Feasibility confirmed: `huma.Context.Param` works at
+middleware; cedar-go `Get` is lazy.
+
+TWO STANDOUT CATCHES:
+- **Latent enforcement bug (implementer-found):** Huma snapshots `api.Middlewares()` into each
+  op at `huma.Register` time, so the old "register routes THEN install authz" order meant
+  authz NEVER RAN (silent bypass) — caught by a new deny test returning 201. Fixed by
+  splitting `Install` (pre-register, UseMiddleware) / `Finalize` (post-register, security
+  docs); router installs before Register, finalizes after.
+- **Custom-principal regression (review-found, MAJOR, fixed):** the precedence fix routed the
+  principal resolver by static `{User,Anonymous}`, so a custom Authenticator minting a
+  non-User type (the documented WithAuthenticator/JWT/OIDC seam) → principal entity silently
+  unresolved → role parents never projected → every `principal in Role` fails → blanket 403.
+  Fixed: register the principal resolver under the actual `p.UID.Type` too, with a
+  `principalFirst` chain so a slice owning that type still serves its own instances
+  (principal resolver only matches its own bound UID). Regression tests added.
+Review also fixed: error when a Resolver has empty Types; apikey uses `authz.PrincipalType`
+(single source); undeclared op → 403 (not 401). Deferred nits (reasonable): empty-id
+fallback warning; `ActionDelete` declared but no delete route (full CRUD vocab — optional
+trim); two NewMiddleware instances (not a defect).
+
+Minor decision worth a user nod: complete-todo → `ActionUpdate`; `{id}` param (not the
+doc's illustrative `{todoID}`); `ActionDelete` declared w/o a route. Branch held local.
+PAUSED for gate-2 → Phase C (container-backed integration + functional allow/deny).
