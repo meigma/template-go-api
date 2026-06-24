@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
@@ -38,6 +39,19 @@ type RouterDeps struct {
 	Readiness []ReadinessCheck
 	// Register mounts resource operations onto the Huma API.
 	Register Registrar
+	// InstallAuthz installs the authentication/authorization Huma middleware on
+	// the API. It MUST run before the resource operations are registered: Huma
+	// snapshots the API's middleware stack into each operation at registration
+	// time, so middleware added afterward never runs. Nil (or a disabled
+	// middleware) leaves the API unauthenticated — the escape hatch.
+	InstallAuthz func(huma.API)
+	// FinalizeAuthz stamps the OpenAPI security scheme and per-operation security
+	// requirements onto the document. It MUST run after registration (it iterates
+	// the registered operations). Nil (or a disabled middleware) leaves the spec
+	// without security. It is the post-register counterpart to InstallAuthz,
+	// split because Huma fixes an operation's middleware at registration time
+	// while its OpenAPI metadata can be mutated afterward.
+	FinalizeAuthz func(huma.API)
 }
 
 // NewRouter assembles the chi router: the core middleware stack, RFC 9457 error
@@ -77,10 +91,23 @@ func NewRouter(deps RouterDeps) http.Handler {
 		problem.Write(w, http.StatusMethodNotAllowed, "the method is not allowed for this resource")
 	})
 
-	// Resource operations are mounted by their adapter packages via the Registrar.
 	api := NewAPI(mux, deps.Version)
+	// The authn/authz Huma middleware is installed BEFORE the operations are
+	// registered: Huma bakes the API's middleware stack into each operation at
+	// registration time, so middleware added afterward would never run. It is a
+	// no-op when authorization is disabled.
+	if deps.InstallAuthz != nil {
+		deps.InstallAuthz(api)
+	}
+	// Resource operations are mounted by their adapter packages via the Registrar.
 	if deps.Register != nil {
 		deps.Register(api)
+	}
+	// OpenAPI security is stamped AFTER registration, once the operations exist;
+	// it only mutates document metadata, so it is safe post-register. No-op when
+	// authorization is disabled.
+	if deps.FinalizeAuthz != nil {
+		deps.FinalizeAuthz(api)
 	}
 
 	// Infrastructure routes stay raw chi and are excluded from the spec.

@@ -1,10 +1,11 @@
 // Package app is the composition root: it wires the domain service, the
-// PostgreSQL persistence adapter, observability, and the HTTP server into a
-// runnable App.
+// PostgreSQL persistence adapter, the authorization engine and API-key
+// authenticator, observability, and the HTTP server into a runnable App.
 package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,9 +16,12 @@ import (
 
 	adapterhttp "github.com/meigma/template-go-api/internal/adapter/http"
 	"github.com/meigma/template-go-api/internal/adapter/postgres"
+	"github.com/meigma/template-go-api/internal/authz"
+	"github.com/meigma/template-go-api/internal/authz/apikey"
 	"github.com/meigma/template-go-api/internal/config"
 	"github.com/meigma/template-go-api/internal/observability"
 	"github.com/meigma/template-go-api/internal/todo"
+	todoauthz "github.com/meigma/template-go-api/internal/todo/authz"
 	"github.com/meigma/template-go-api/internal/todo/httpapi"
 	todopostgres "github.com/meigma/template-go-api/internal/todo/postgres"
 )
@@ -37,7 +41,8 @@ type App struct {
 type Option func(*options)
 
 type options struct {
-	repo todo.Repository
+	repo          todo.Repository
+	authenticator authz.Authenticator
 }
 
 // WithRepository injects a ready-made todo.Repository instead of connecting the
@@ -47,6 +52,17 @@ type options struct {
 func WithRepository(repo todo.Repository) Option {
 	return func(o *options) {
 		o.repo = repo
+	}
+}
+
+// WithAuthenticator injects an authz.Authenticator instead of wiring the shipped
+// PostgreSQL-backed API-key authenticator. It mirrors WithRepository: tests use
+// it to authenticate a request without a database (so authz can run with
+// AuthzEnabled true and no api_keys table), and integrators use it to plug in a
+// real verifier (JWT/OIDC/session) without editing the composition root.
+func WithAuthenticator(authenticator authz.Authenticator) Option {
+	return func(o *options) {
+		o.authenticator = authenticator
 	}
 }
 
@@ -74,6 +90,11 @@ func New(
 	service := todo.NewService(repo, logger)
 	metrics := observability.NewMetrics()
 
+	installAuthz, finalizeAuthz, err := authzInstaller(cfg, repo, pool, logger, o.authenticator)
+	if err != nil {
+		return nil, err
+	}
+
 	// An empty metrics-addr co-locates /metrics on the API listener; otherwise a
 	// dedicated metrics server (below) serves it off the API surface.
 	serveMetricsInline := cfg.MetricsAddr == ""
@@ -87,8 +108,10 @@ func New(
 		TrustedProxyHeader:   cfg.TrustedProxyHeader,
 		// The postgres store contributes a real connectivity check here; an
 		// injected repository (tests) contributes none, so /readyz is always ready.
-		Readiness: readiness,
-		Register:  registerResources(service),
+		Readiness:     readiness,
+		Register:      registerResources(service),
+		InstallAuthz:  installAuthz,
+		FinalizeAuthz: finalizeAuthz,
 	})
 
 	server := &http.Server{
@@ -145,6 +168,78 @@ func resolveStore(
 	return repo, pool, readiness, nil
 }
 
+// authzInstaller builds the authorization engine and returns a hook that
+// installs the authn/authz Huma middleware on the API. The Authorizer merges the
+// base cross-cutting policies with each domain slice's Contribution — the todo
+// slice contributes its policies, actions, and a repo-backed fact resolver, so
+// an attribute policy can load a todo lazily through repo. Adding a resource adds
+// one Contribution here. cfg.AuthzPolicyDir, when set, loads the base policies
+// from that directory instead of the embedded base.cedar.
+//
+// Authentication is resolved through WithAuthenticator when one is injected
+// (tests, or an integrator-supplied verifier); otherwise the shipped
+// PostgreSQL-backed API-key authenticator is wired, which needs a pool when
+// authorization is enabled. The middleware is inert when cfg.AuthzEnabled is
+// false, keeping every route working without authentication.
+func authzInstaller(
+	cfg config.Config,
+	repo todo.Repository,
+	pool *pgxpool.Pool,
+	logger *slog.Logger,
+	injected authz.Authenticator,
+) (func(huma.API), func(huma.API), error) {
+	authorizer, err := authz.New(
+		[]authz.Contribution{todoauthz.Contribution(repo)},
+		authz.WithPolicyDir(cfg.AuthzPolicyDir),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build authorizer: %w", err)
+	}
+
+	authenticator, err := resolveAuthenticator(cfg, pool, injected)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// install registers the middleware before resources are mounted; finalize
+	// stamps the OpenAPI security after — the split Huma's registration-time
+	// middleware snapshot requires.
+	install := func(api huma.API) {
+		authz.NewMiddleware(api, authenticator, authorizer, logger, cfg.AuthzEnabled).Install()
+	}
+	finalize := func(api huma.API) {
+		authz.NewMiddleware(api, authenticator, authorizer, logger, cfg.AuthzEnabled).Finalize()
+	}
+
+	return install, finalize, nil
+}
+
+// resolveAuthenticator selects the authenticator the middleware runs. An injected
+// authenticator (WithAuthenticator) is used as-is, the seam tests use to satisfy
+// authz without a database and integrators use to plug in a real verifier.
+// Otherwise the shipped PostgreSQL-backed API-key authenticator is wired, which
+// requires a pool when authorization is enabled; when disabled the middleware
+// never runs, so a nil authenticator is harmless.
+func resolveAuthenticator(
+	cfg config.Config,
+	pool *pgxpool.Pool,
+	injected authz.Authenticator,
+) (authz.Authenticator, error) {
+	if injected != nil {
+		return injected, nil
+	}
+
+	if cfg.AuthzEnabled && pool == nil {
+		return nil, errors.New("authz-enabled requires a database connection for the api-key store")
+	}
+
+	if pool == nil {
+		return nil, nil //nolint:nilnil // a disabled middleware never invokes the authenticator.
+	}
+
+	return apikey.NewAuthenticator(apikey.NewStore(pool)), nil
+}
+
 // Handler returns the assembled HTTP handler, primarily for functional tests.
 func (a *App) Handler() http.Handler {
 	return a.server.Handler
@@ -154,10 +249,15 @@ func (a *App) Handler() http.Handler {
 // OpenAPI 3.0.3 specification as YAML. The repository is never invoked while
 // generating the spec, so a no-op stub stands in for the real adapter and no
 // database connection is required.
+//
+// The routes are tagged with their authorization declarations, so the export
+// also stamps the security scheme and per-operation requirements via
+// authz.DocumentSecurity — independently of the runtime --authz-enabled flag, so
+// the committed spec always advertises the protection the routes declare.
 func OpenAPIYAML(version string) ([]byte, error) {
 	service := todo.NewService(noopRepository{}, nil)
 
-	spec, err := adapterhttp.SpecYAML(version, registerResources(service))
+	spec, err := adapterhttp.SpecYAML(version, registerResources(service), authz.DocumentSecurity)
 	if err != nil {
 		return nil, fmt.Errorf("build openapi spec: %w", err)
 	}

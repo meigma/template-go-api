@@ -24,6 +24,24 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Empty(t, cfg.TrustedProxyHeader)
 	assert.Empty(t, cfg.DatabaseURL)
 	assert.Zero(t, cfg.DBMaxConns)
+	assert.True(t, cfg.AuthzEnabled, "authz is enabled by default now that the routes are tagged")
+	assert.Empty(t, cfg.AuthzPolicyDir)
+}
+
+func TestLoadAuthzFromFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	RegisterFlags(flags)
+	require.NoError(t, flags.Set("authz-enabled", "true"))
+	require.NoError(t, flags.Set("authz-policy-dir", "/etc/policies"))
+
+	vp := viper.New()
+	require.NoError(t, vp.BindPFlags(flags))
+
+	cfg := Load(vp)
+	assert.True(t, cfg.AuthzEnabled)
+	assert.Equal(t, "/etc/policies", cfg.AuthzPolicyDir)
 }
 
 func TestLoadEnvOverride(t *testing.T) {

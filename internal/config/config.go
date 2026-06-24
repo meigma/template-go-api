@@ -24,6 +24,12 @@ const (
 	defaultLogLevel          = "info"
 	defaultLogFormat         = "json"
 	defaultDBMaxConns        = 0
+	// defaultAuthzEnabled is true: the todo routes now carry their authorization
+	// declarations and the engine merges the base policies with each slice's
+	// Contribution, so the deny-by-default middleware protects the API out of the
+	// box. Operators set it false as an escape hatch to bypass authorization
+	// entirely (incremental adoption or local debugging).
+	defaultAuthzEnabled = true
 )
 
 // Config holds runtime settings for the API server.
@@ -62,6 +68,16 @@ type Config struct {
 	// DBMaxConns caps the PostgreSQL connection pool size. Zero leaves the
 	// driver default in place.
 	DBMaxConns int32
+	// AuthzEnabled is the authorization master switch. It defaults to true now
+	// that the routes carry their authorization declarations: the deny-by-default
+	// middleware protects the API out of the box. When false the authz middleware
+	// is inert (pass-through), the escape hatch for incremental adoption or local
+	// debugging.
+	AuthzEnabled bool
+	// AuthzPolicyDir optionally loads .cedar policy files from a directory
+	// instead of the embedded set. Empty (the default) uses the embedded
+	// policies.
+	AuthzPolicyDir string
 }
 
 // RegisterFlags declares the server configuration flags on flags. Binding them
@@ -89,6 +105,16 @@ func RegisterFlags(flags *pflag.FlagSet) {
 	)
 	flags.String("database-url", "", "PostgreSQL connection URL (required)")
 	flags.Int32("db-max-conns", defaultDBMaxConns, "maximum PostgreSQL pool connections; 0 uses the driver default")
+	flags.Bool(
+		"authz-enabled",
+		defaultAuthzEnabled,
+		"enable the authorization middleware (deny-by-default); false bypasses it entirely",
+	)
+	flags.String(
+		"authz-policy-dir",
+		"",
+		"directory of .cedar policy files to load instead of the embedded policies; empty uses the embedded set",
+	)
 }
 
 // Load reads the server configuration from vp, applying defaults for unset keys.
@@ -110,6 +136,8 @@ func Load(vp *viper.Viper) Config {
 		TrustedProxyHeader: vp.GetString("trusted-proxy-header"),
 		DatabaseURL:        vp.GetString("database-url"),
 		DBMaxConns:         vp.GetInt32("db-max-conns"),
+		AuthzEnabled:       vp.GetBool("authz-enabled"),
+		AuthzPolicyDir:     vp.GetString("authz-policy-dir"),
 	}
 }
 
@@ -152,4 +180,6 @@ func setDefaults(vp *viper.Viper) {
 	vp.SetDefault("trusted-proxy-header", "")
 	vp.SetDefault("database-url", "")
 	vp.SetDefault("db-max-conns", defaultDBMaxConns)
+	vp.SetDefault("authz-enabled", defaultAuthzEnabled)
+	vp.SetDefault("authz-policy-dir", "")
 }

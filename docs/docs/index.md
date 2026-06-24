@@ -17,12 +17,28 @@ port to back the template with a different datastore.
 
 The server persists to PostgreSQL, so running it needs a database. The fastest
 path is Docker Compose, which brings up the database, migrations, seed data, and
-the API together:
+the API together. The Compose stack also seeds dev-only mock API keys, because
+the todo routes are protected by the authorization tier (on by default):
 
 ```sh
 docker compose up --build
-curl -sS -X POST localhost:8080/todos -H 'content-type: application/json' -d '{"title":"buy milk"}'
+
+# Authorization is on: without a key, a protected route returns 401.
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos   # => 401
+
+# Use the seeded dev user key (sent via the X-API-Key header):
+curl -sS -X POST localhost:8080/todos \
+  -H 'X-API-Key: dev-user-key' \
+  -H 'content-type: application/json' \
+  -d '{"title":"buy milk"}'                                       # => 201
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, the seeded todos
 ```
+
+The stack seeds two mock keys: `dev-user-key` (role `user`, authorized for the
+todo actions) and `dev-admin-key` (role `admin`, authorized for everything).
+These are insecure, dev-only credentials — real deployments insert their own
+keys and never apply `hack/sql/`. The operational endpoints (`/healthz`,
+`/readyz`, `/metrics`) sit outside the authorization middleware and need no key.
 
 To build the binary and run it against your own PostgreSQL instead:
 
@@ -32,15 +48,21 @@ docker run --rm -d -p 5432:5432 \
   -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app postgres:17-alpine
 export TEMPLATE_GO_API_DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
 moon run root:build
-./bin/template-go-api migrate up   # create the schema
+./bin/template-go-api migrate up   # create the schema (incl. the api_keys table)
 ./bin/template-go-api serve        # listens on :8080
 ```
+
+Running the binary directly applies the schema but not the `hack/sql/` seeds, so
+the `api_keys` table starts empty. Insert a key yourself, or set
+`TEMPLATE_GO_API_AUTHZ_ENABLED=false` to bypass authorization while developing.
 
 See the [README](https://github.com/meigma/template-go-api#readme) for the full
 quickstart, configuration reference, the
 [Persistence](https://github.com/meigma/template-go-api#persistence) workflow
-(migrations, sqlc regeneration, integration tests, dynamic queries), and guidance
-on replacing the example resource.
+(migrations, sqlc regeneration, integration tests, dynamic queries), the
+[Authorization](https://github.com/meigma/template-go-api#authorization) tier
+(Cedar policies, the deferred-authn seam, the modular slice pattern), and
+guidance on replacing the example resource.
 
 ## API reference
 
@@ -54,6 +76,7 @@ running server also serves interactive docs at `/docs` and the live spec at
 - Readiness: `GET /readyz` (reports named per-check results; the PostgreSQL adapter adds a `postgres` connectivity check)
 - Metrics: `GET /metrics` on a dedicated listener (`--metrics-addr`, default `:9090`)
 - Migrations are explicit: `serve` never runs them; use the `migrate up|down|status` subcommand.
+- Authorization is deny-by-default and on by default (`--authz-enabled`, env `TEMPLATE_GO_API_AUTHZ_ENABLED`); the operational endpoints above are outside the authorization middleware. Set it `false` to bypass authorization entirely.
 
 ## Support and security
 

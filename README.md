@@ -50,23 +50,35 @@ To build the binary and run it against your own PostgreSQL instead, see
 moon run root:build          # or: go build -o bin/template-go-api ./cmd/template-go-api
 ```
 
-With the stack up, exercise the example `todo` API:
+With the stack up, exercise the example `todo` API. The todo routes are
+protected by the [Authorization](#authorization) tier (on by default), so each
+request carries one of the dev keys the Compose stack seeds — `dev-user-key`
+sent via the `X-API-Key` header:
 
 ```sh
-# Create a todo
+# Without a key, protected routes reject the request:
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos
+# => 401
+
+# Create a todo (the user key has the role the todo policy requires):
 curl -sS -X POST localhost:8080/todos \
+  -H 'X-API-Key: dev-user-key' \
   -H 'content-type: application/json' \
   -d '{"title":"buy milk"}'
-# => 201 {"id":"...","title":"buy milk","status":"open","createdAt":"...","completedAt":null}
+# => 201 {"$schema":"...","id":"...","title":"buy milk","status":"open","createdAt":"..."}
 
-curl -sS localhost:8080/todos                 # list
-curl -sS localhost:8080/todos/<id>            # fetch one (404 if unknown)
-curl -sS -X POST localhost:8080/todos/<id>/complete   # mark complete
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos               # list
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>          # fetch one (404 if unknown)
+curl -sS -X POST -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>/complete   # mark complete
 
 # Validation and not-found errors use RFC 9457 problem+json:
-curl -sS -i -X POST localhost:8080/todos -H 'content-type: application/json' -d '{"title":""}'
+curl -sS -i -X POST localhost:8080/todos \
+  -H 'X-API-Key: dev-user-key' -H 'content-type: application/json' -d '{"title":""}'
 # => 422 application/problem+json
 ```
+
+These mock keys are dev-only seeds; see [Authorization](#authorization) for how
+authn/authz work and how to plug in a real authenticator.
 
 Operational endpoints:
 
@@ -86,13 +98,24 @@ Elements) and the live spec at `/openapi.yaml` and `/openapi.json`.
 ## Local stack (Docker Compose)
 
 `docker compose up --build` brings up the **full** template against PostgreSQL —
-no local Go toolchain or database setup required:
+no local Go toolchain or database setup required. The stack also seeds the
+dev-only mock API keys (`hack/sql/0002_seed_api_keys.sql`), so the
+[Authorization](#authorization) tier is exercised end to end out of the box:
 
 ```sh
 docker compose up --build
-curl -sS localhost:8080/todos    # => the seeded todos
+
+# Authorization is on by default. With no key, a protected route returns 401:
+curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/todos   # => 401
+
+# With the seeded dev user key, the same route returns 200 and the seeded todos:
+curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos       # => 200, the seeded todos
+
 curl -sS localhost:8080/readyz   # => {"status":"ready","checks":{"postgres":"ok"}}
 ```
+
+`/readyz` (and the other operational endpoints) are raw routes outside the Huma
+authorization middleware, so they need no key.
 
 Startup is an ordered DAG, because migrations are explicit (the server never runs
 them) and the seed data needs the schema to exist first:
@@ -112,7 +135,10 @@ Prepopulate local data by dropping SQL files in [`hack/sql/`](hack/sql/) — the
 run after the schema exists, so you can `INSERT` straight into tables like `todos`
 without touching migrations or adding setup code to the server. The bundled
 `hack/sql/0001_seed_todos.sql` seeds a few todos so the API returns data on the
-first request.
+first request, and `hack/sql/0002_seed_api_keys.sql` seeds the **dev-only mock
+API keys** (`dev-user-key`, `dev-admin-key`) that the [Authorization](#authorization)
+demo uses. These seeds are local-development only and never reach a real
+deployment (migrations run everywhere; `hack/sql/` does not).
 
 ## Commands
 
@@ -151,6 +177,8 @@ default.
 | `--trusted-proxy-header` | `TEMPLATE_GO_API_TRUSTED_PROXY_HEADER` | _(none)_ | proxy header to read the client IP from (e.g. `X-Real-IP`); empty trusts the TCP peer |
 | `--database-url` | `TEMPLATE_GO_API_DATABASE_URL` | _(none)_ | PostgreSQL connection URL (**required**) |
 | `--db-max-conns` | `TEMPLATE_GO_API_DB_MAX_CONNS` | `0` | maximum PostgreSQL pool connections; `0` uses the driver default |
+| `--authz-enabled` | `TEMPLATE_GO_API_AUTHZ_ENABLED` | `true` | enable the [authorization](#authorization) middleware (deny-by-default); `false` bypasses it entirely |
+| `--authz-policy-dir` | `TEMPLATE_GO_API_AUTHZ_POLICY_DIR` | _(none)_ | directory of `.cedar` files to load instead of the embedded policies; empty uses the embedded set |
 
 CORS is off until you set origins. Client IP is read from the direct TCP peer
 unless you opt into a trusted proxy header — never from `X-Forwarded-For`
@@ -288,6 +316,109 @@ The rule: query-builder types must never appear in a port signature. The domain
 speaks in domain criteria; only the adapter knows SQL. Swapping Squirrel for Bob,
 or back to plain sqlc, then stays a change inside one package.
 
+## Authorization
+
+The template ships an authorization tier built on
+[AWS Cedar](https://www.cedarpolicy.com/) via
+[`cedar-policy/cedar-go`](https://github.com/cedar-policy/cedar-go) as the
+embedded policy engine. Policies are real `.cedar` source, embedded in the binary
+(or loaded from a directory with `--authz-policy-dir`), and evaluated by one
+global Huma middleware.
+
+The posture is **deny-by-default**: every Huma API operation must declare its
+authorization requirement, and an operation that declares none is denied
+(fail-closed) and logged. Denials are returned as RFC 9457 problem responses —
+`401` when no/invalid credential was presented, `403` when an authenticated
+caller lacks the required role. The operational routes (`/healthz`, `/readyz`,
+`/metrics`, `/openapi.*`, `/docs`) are raw chi routes outside the Huma
+middleware, so they are never gated.
+
+`--authz-enabled` (default `true`) is the master switch; setting it `false`
+bypasses the middleware entirely (an escape hatch for incremental adoption or
+local debugging). The declaration also populates each operation's OpenAPI
+`security`, so protection is visible in the generated spec and at `/docs`.
+
+### Authentication is deferred to the integrator
+
+Authentication is **not** something the template decides for you. It ships the
+*seam* — an `Authenticator` interface (`internal/authz`) — plus one **replaceable
+starting point**: an API-key authenticator (`internal/authz/apikey`).
+
+The shipped authenticator reads a key from the `X-API-Key` header or an
+`Authorization: Bearer <key>` credential and resolves it through an `APIKeyStore`
+port to a principal (subject + roles). The shipped store is PostgreSQL-backed:
+keys live in the `api_keys` table (created by migration
+`00002_create_api_keys.sql`). This is a real but minimal mechanism — enough to
+demonstrate the full flow — not production authn. It stores keys verbatim; the
+hardening path (hash + constant-time compare) and replacement with real authn are
+called out in [DELETE_ME.md](DELETE_ME.md).
+
+For local development the Compose stack seeds two mock keys via
+`hack/sql/0002_seed_api_keys.sql`:
+
+| Key            | Roles   | Authorized for                                              |
+| -------------- | ------- | ---------------------------------------------------------- |
+| `dev-user-key` | `user`  | all todo actions (the todo slice's policy)                 |
+| `dev-admin-key`| `admin` | everything (the cross-cutting admin override, `base.cedar`)|
+
+These are **insecure, public, dev-only** credentials; real deployments insert
+their own `api_keys` rows and never apply `hack/sql/`.
+
+To swap in real authn (JWT/OIDC/session), implement `authz.Authenticator` and
+inject it with `app.WithAuthenticator`; nothing else in the tier changes.
+
+### Modular, per-resource authorization
+
+Authorization is **modular** in the same way the HTTP transport is: each domain
+contributes an *authz slice* and the composition root merges all contributions
+into one runtime engine. The todo slice lives at `internal/todo/authz` and
+contributes three things via an `authz.Contribution`:
+
+- **Policies** — embedded `policy.cedar` source (merged with `base.cedar` and
+  every other slice's policies into one Cedar `PolicySet`).
+- **Actions** — typed Cedar action identifiers (`todoauthz.ActionCreate`,
+  `ActionRead`, `ActionUpdate`, `ActionDelete`, `ActionList`), each of the form
+  `Action::"todo:<verb>"`.
+- **A fact resolver** — maps a `Todo` entity to its Cedar attributes/parents,
+  loaded **lazily** (only when a policy dereferences a todo, which the shipped
+  coarse policy never does).
+
+The HTTP slice tags each operation with its action at registration, using
+`authz.Require` (or `authz.Public` to opt out):
+
+```go
+huma.Register(api, huma.Operation{
+    OperationID: "get-todo",
+    Method:      http.MethodGet,
+    Path:        "/todos/{id}",
+    // Item operation: bind the {id} path param so the middleware sets
+    // Resource = Todo::"<id>" straight from the matched route (no load).
+    Metadata: authz.Require(todoauthz.ActionRead, "id"),
+}, h.get)
+
+huma.Register(api, huma.Operation{
+    OperationID: "list-todos",
+    Method:      http.MethodGet,
+    Path:        "/todos",
+    // Collection operation: type-level resource, no id bound.
+    Metadata: authz.Require(todoauthz.ActionList),
+}, h.list)
+```
+
+To add authorization to a **new** resource, mirror the todo slice:
+
+1. Add `internal/<resource>/authz` with `policy.cedar` (embedded), typed action
+   constants, a fact resolver, and a `Contribution(repo)` function.
+2. Tag the resource's `httpapi` operations with `authz.Require(<action>[, idParam])`
+   (or `authz.Public()` for an unauthenticated operation).
+3. Add the slice's `Contribution(...)` to the slice list passed to `authz.New`
+   in `internal/app/app.go` (alongside `todoauthz.Contribution(repo)`).
+
+At runtime there is one merged `PolicySet` over one shared entity space, so a
+policy in one slice can reference shared principal roles (`principal in
+Role::"admin"`) or another slice's entities. Cross-cutting rules and shared
+principal/role types live in the base package's `base.cedar`.
+
 ## Testing
 
 Unit tests sit beside the code and use [Testify](https://github.com/stretchr/testify)
@@ -325,8 +456,12 @@ internal/
     postgres/               outbound adapter: PostgreSQL Repository (pgx + sqlc)
       queries/              hand-written sqlc queries
       sqlc/                 generated, committed, drift-guarded query layer
+    authz/                  the todo authz slice: policy.cedar, actions, fact resolver
     mocks/                  generated testify mock of the Repository port (mockery)
     todotest/               in-memory Repository fake for tests
+  authz/                    base authz engine: Cedar Authorizer, deny-by-default middleware,
+                            Require/Public declarations, Principal/Authenticator seam, base.cedar
+    apikey/                 the shipped API-key Authenticator + PostgreSQL APIKeyStore
   adapter/                  shared, cross-domain infrastructure (not domain-specific)
     http/                   generic transport: chi router, middleware, RFC 9457 errors,
                             /healthz /readyz /metrics, OpenAPI export, Registrar seam
@@ -353,7 +488,8 @@ package root, with its adapters nested beneath it.
 1. Add a domain package `internal/<resource>` (entity + `Repository` port + `Service`), mirroring `internal/todo`.
 2. Implement the port in a nested adapter — mirror `internal/todo/postgres` for a PostgreSQL-backed datastore (see [Persistence](#persistence) for the sqlc/goose workflow).
 3. Add a transport adapter `internal/<resource>/httpapi` (DTOs, domain mapping, error translation, and a `Register` function), mirroring `internal/todo/httpapi`.
-4. Add one `Register` call in `registerResources` in `internal/app/app.go`.
+4. Add an authz slice `internal/<resource>/authz` (policies, actions, fact resolver) and tag the `httpapi` operations with `authz.Require`/`authz.Public`, then merge its `Contribution` in `internal/app/app.go`. See [Authorization](#authorization) — deny-by-default means an untagged operation is rejected.
+5. Add one `Register` call in `registerResources` in `internal/app/app.go`.
 
 Shared, cross-domain infrastructure needs no changes: the generic transport in
 `internal/adapter/http` and the connection pool / migrations in

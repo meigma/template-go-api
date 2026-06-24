@@ -1,7 +1,7 @@
 # Day-one local stack: PostgreSQL + the API server, fully wired.
 #
 #   docker compose up --build
-#   curl -sS localhost:8080/todos      # returns the seeded todos
+#   curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos   # the seeded todos (authz is on)
 #
 # Startup is an ordered DAG, because migrations are explicit (the server never
 # runs them) and the seed data depends on the schema existing first:
