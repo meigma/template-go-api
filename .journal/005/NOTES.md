@@ -263,3 +263,21 @@ Proposing doc edits to sync (no design change): per-domain paths + httpapi + ali
 API-key store = postgres-backed (drop config/two-adapter + `--api-keys`); api_keys table
 migration + `hack/sql/` mock-keys seed; §8C resolved via dev-only seed; mockery for new
 ports; remove `--store`. Awaiting user go-ahead to apply, then build.
+
+## 2026-06-23 17:20 — AUTHZ_TIER.md synced to 006-008 (user: "Proceed")
+Applied all sync edits to AUTHZ_TIER.md (status now "synced to PRs #7–#9 / sessions
+006–008"). Changes (no design change, core spine intact): §1.2 authn = API-key backed by
+postgres `api_keys` table + `hack/sql/` mock seed; §2 layout redrawn to per-domain
+(`internal/todo/{httpapi,postgres,authz}`, base `internal/authz`, `internal/authz/apikey`,
+`api_keys` migration under shared `internal/adapter/postgres/migrations`, `hack/sql/` seed)
++ `todopostgres`→`todoauthz` alias precedent + mockery note; §4/§5 `httpapi`; §7 API-key
+authenticator = `APIKeyStore` port + postgres adapter (3 impl rules incl. mockery); §8C
+RESOLVED (table-migration + dev-only seed = safe by construction; no open sub-decision);
+§9 dropped `--api-keys` (keys in DB); §10/§12 ships+phasing updated (migration, store
+adapter, mockery, seed in Phase D); §13 dropped the §8C item, added base-package-home
+placement note. Committed + pushed.
+
+Doc is now build-ready. Remaining items are Phase-A feasibility checks (Huma path-param
+accessor; cedar-go on-demand `Get`) + the minor `internal/authz` vs `internal/adapter/authz`
+home — none blocking. NEXT: on user's go, kick off the gated build, Phase A, on branch
+`feat/authz-tier` (own worktree off fetched master, squash-merged PR; human gate per phase).

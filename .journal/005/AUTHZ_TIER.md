@@ -1,6 +1,6 @@
 # Authorization Tier — Design Doc (temporary, journal-only)
 
-**Status:** DRAFT for review · **Session:** 005 · **Date:** 2026-06-23
+**Status:** DRAFT for review (synced to PRs #7–#9 / sessions 006–008) · **Session:** 005 · **Date:** 2026-06-23
 **Role:** Source of truth for the authorization-tier implementation, mirroring
 `.journal/004/POSTGRES_TIER.md`'s role for the Postgres tier. Journal-only; the
 product repo is untouched until the gated build runs.
@@ -20,7 +20,8 @@ collaboratively with the user across session 005.
    least useful boundary; committing lets us surface `Diagnostic` reasons, the typed
    `Request`, and real `.cedar` policies, and drops a DTO-mapping layer.)
 2. **Authentication is deferred to the integrator** (JWT/OIDC/session/passkey). The
-   template ships the *seam* + a clearly-marked **dev authenticator** + documented
+   template ships the *seam* + a rudimentary **API-key authenticator** backed by a
+   PostgreSQL `api_keys` table (mock keys seeded dev-only via `hack/sql/`) + documented
    JWT/OIDC reference verifiers — never production authn.
 3. **Modular, per-slice authorization** (vertical-slice pattern, mirrors the HTTP
    `Registrar` seam). Each domain ships an *authz slice* contributing its policies,
@@ -51,37 +52,53 @@ collaboratively with the user across session 005.
 ```
 internal/
   todo/                         # pure domain — NO cedar import (unchanged)
-  authz/                        # base/engine package (resource-agnostic)
+    httpapi/                    #   existing HTTP slice (pkg httpapi) — consumes todo/authz actions
+    postgres/                   #   existing todo repository (pkg postgres)
+    authz/                      #   the todo authz slice (pkg authz; imports todo + cedar)
+      policy.cedar    (embed)   #     todo-specific policies
+      actions.go                #     ActionCreate = Action::"todo:create", ActionRead, ...
+      facts.go                  #     todo.Todo -> cedar.Entity (attributes + parents); the resolver
+      contribution.go           #     Contribution() consumed by the composition root
+  authz/                        # base/engine package (resource-agnostic, cross-cutting)
     authz.go                    #   Authorizer (wraps PolicySet); Authorize(ctx, Request)
     contribution.go             #   type Contribution { Policies; Actions; Resolver } + collection
     middleware.go               #   Huma global middleware: authn-principal -> request -> decision
     declare.go                  #   Require(action[, idParam]) / Public() -> operation metadata
     principal.go                #   Principal (opaque): EntityUID + claims Record; context get/put
-    authn.go                    #   Authenticator seam (interface) + dev authenticator
+    authn.go                    #   Authenticator seam (interface)
     getter.go                   #   request-scoped composite EntityGetter (lazy, error-capturing)
     base.cedar        (embed)   #   cross-cutting policies (e.g. admin override)
-  todo/authz/                   # the todo authz slice (package authz; imports todo + cedar; domain core does not)
-    policy.cedar      (embed)   #   todo-specific policies
-    actions.go                  #   ActionCreate = Action::"todo:create", ActionRead, ...
-    facts.go                    #   todo.Todo -> cedar.Entity (attributes + parents); the resolver
-    contribution.go             #   Contribution() consumed by the composition root
-  adapter/http/todoapi/         # consumes todoauthz.Action* when registering routes (unchanged shape)
-  app/                          # composition root: collects []authz.Contribution, wires Authorizer
+    apikey/                     #   API-key Authenticator + postgres-backed APIKeyStore (pkg apikey)
+  adapter/
+    http/                       # shared generic chi/Huma transport (+ middleware, problem) — unchanged
+    postgres/                   # shared pool/Connect + goose migrate + embedded migrations/
+      migrations/               #   + new goose migration: create the api_keys table (schema)
+  app/                          # composition root: collects []authz.Contribution; wires Authorizer + Authenticator
   config/                       # new flags (see §9)
+hack/sql/                       # dev-only seeds applied AFTER migrations by compose (session 006)
+  NNNN_seed_api_keys.sql        #   MOCK api keys (dev-only, ephemeral — never reaches a real deploy)
 ```
 
-**Package naming.** Per-slice authz packages live *under their domain*
-(`internal/todo/authz`, `package authz`) — not under a prefixed `todoauthz` name.
-Because the base engine package is *also* `package authz` (`internal/authz`), the two
-files that need both (the composition root and `todoapi`) alias the slice on import,
-e.g. `todoauthz "…/internal/todo/authz"`; the directory stays clean and the
-`todoauthz.X` identifier in examples below is just that alias. The dependency runs
+**Layout follows the per-domain structure (PR #8 `1f1e5a7`).** Each domain owns its
+adapters nested beneath its core (`internal/todo/{httpapi,postgres,authz}`); shared
+cross-domain infra stays under `internal/adapter/{http,postgres}`. The base authz engine
+is a cross-cutting concern at `internal/authz` (sibling to `config`/`observability`/
+`logctx`). The `api_keys` *table* is DB-level schema → a goose migration under the shared
+`internal/adapter/postgres/migrations`; the *mock keys* are data → a dev-only `hack/sql/`
+seed (the session-006 hook, applied after migrations, never in a real deploy).
+
+**Package naming.** The slice package is `package authz` at `internal/todo/authz`. Since
+the base engine is *also* `package authz` (`internal/authz`), the two files that need
+both (the composition root and `internal/todo/httpapi`) alias the slice on import — e.g.
+`todoauthz "…/internal/todo/authz"` — exactly the established `todopostgres` alias
+precedent (PR #8) for the like-named per-domain `postgres` package. The dependency runs
 slice → domain core only (`internal/todo` never imports its `authz` subpackage), so the
-Cedar-free-domain rule still holds. (The HTTP layer's `todoapi` has the same prefix
-redundancy; the user intends to align it to `todo/http` separately — out of scope here.)
+Cedar-free-domain rule holds.
 
 `cedar-go` is a plain Go module dependency (`go get`), not a Proto-managed tool —
-no `.moon/proto` or `.prototools` changes (contrast the sqlc/goose tier).
+no `.moon/proto` or `.prototools` changes (contrast the sqlc/goose/mockery tiers). New
+ports (`Authenticator`, `APIKeyStore`, the authz `EntityResolver`) get **mockery** test
+doubles per the repo convention (PR #9): `.mockery.yaml` + generated mock + `mockery-check`.
 
 ---
 
@@ -132,7 +149,8 @@ its slice (domain + transport + persistence + authz); deleting one is surgical
 Middleware order (all Huma-level via `api.UseMiddleware`, after the existing chi
 stack of request-id → recover → access-log → timeout → CORS → client-IP):
 
-1. **authn middleware** — runs the configured `Authenticator` (dev or real). On
+1. **authn middleware** — runs the configured `Authenticator` (the API-key default, or a
+   real verifier). On
    success, builds an opaque `authz.Principal` (`EntityUID` + claims `Record`) and
    stores it via `huma.WithValue`. On no/invalid credentials, stores "anonymous"
    (does **not** reject here — let authz decide; public ops still work).
@@ -155,7 +173,7 @@ Rejections reuse the existing `internal/adapter/http/problem` RFC 9457 writer.
 
 ## 5. Expression UX (what a developer writes)
 
-At route registration in the slice's `todoapi` registrar:
+At route registration in the slice's `httpapi` registrar (`internal/todo/httpapi`):
 
 ```go
 huma.Register(api, huma.Operation{
@@ -226,14 +244,18 @@ type Principal struct {
 - The principal's group memberships (for `principal in Group::"…"`) are built into the
   principal entity's `Parents` from claims day-one (no load); a base-package resolver
   can resolve them lazily from an IdP/DB later.
-- **API-key authenticator** (template default — see §8C): the shipped `Authenticator`.
-  Reads a bearer / `X-API-Key` credential, looks it up in a configured key→principal map
-  (subject + roles), and produces the `Principal`. A *real* (if minimal) mechanism — not
-  pure header impersonation — so it both demos the full flow and is a plausible starting
-  point a consumer could harden; still trivial to remove (one `Authenticator` impl + one
-  config field). Two implementation rules: (1) **never log the key** — the access-log
-  middleware must redact `Authorization` / `X-API-Key`; (2) day-one is a plain map
-  lookup, with hashing + constant-time compare noted as the hardening path in DELETE_ME.
+- **API-key authenticator** (template default — see §8C): the shipped `Authenticator`
+  (`internal/authz/apikey`). Reads a bearer / `X-API-Key` credential and resolves it via
+  an **`APIKeyStore` port** to a `Principal` (subject + roles). The shipped adapter is
+  **PostgreSQL-backed** — keys live in an `api_keys` table (the template is postgres-only
+  since PR #9), so there is a single source and no config-vs-DB split. A *real* (if
+  minimal) mechanism — not header impersonation — so it both demos the full flow and is a
+  plausible starting point a consumer could harden; still trivial to remove (delete the
+  `hack/sql/` seed for the mock data, and the migration + `internal/authz/apikey` for the
+  whole feature). Three implementation rules: (1) **never log the key** — the access-log
+  middleware must redact `Authorization` / `X-API-Key`; (2) day-one stores keys verbatim
+  with a plain lookup, hashing + constant-time compare noted as the hardening path in
+  DELETE_ME; (3) the `APIKeyStore` port gets a **mockery** double for unit tests.
 - **Reference production authn** (documented, not wired): JWT via `lestrrat-go/jwx`,
   OIDC via `coreos/go-oidc` — each implements `Authenticator` and hands verified claims
   into `Principal`.
@@ -255,24 +277,21 @@ Safest posture and instructive. (Infra routes — `/healthz` `/readyz` `/metrics
 `/openapi` — are raw chi routes outside the Huma authz middleware, so they're
 unaffected.)
 
-**C. Day-one authn — RESOLVED via a rudimentary API-key layer (supersedes the earlier
-dev-header proposal).** The shipped `Authenticator` is an API-key layer (§7): a
-configured key→principal(+roles) map. A *real* credential rather than header
-impersonation, so the copy-to-prod risk is smaller (you need the key, not just any
-header) and it doubles as a plausible starting point. It exercises the full flow:
-no key → 401; valid user key → allowed on its routes; key lacking a role → 403; admin
-key → everything (via `base.cedar`).
-- **Sub-decision (smaller stakes now): do built-in dev keys ship?**
-  - *Recommended:* ship a small built-in dev key set (one user, one admin) so `go run` +
-    the documented curl works zero-config, WITH a loud startup warning whenever built-in
-    keys are active, a config override (`--api-keys`) for real keys, and DELETE_ME as the
-    #1 removal item. (Honors "mostly hardcoded + trivial".) Residual footgun: a copy
-    deployed with the default keys unchanged — mitigated by the warning + docs, and
-    smaller than header impersonation.
-  - *Safer variant:* no default keys → out-of-the-box every protected route 401s (still
-    demonstrates enforcement); you set a key in config to exercise allow-paths. No shipped
-    secret if copied to prod.
-**→ Need your pick: ship built-in dev keys (zero-config demo) vs no default keys (safest).**
+**C. Day-one authn — RESOLVED: PostgreSQL-backed API keys, mock keys via the `hack/sql/`
+seed.** The shipped `Authenticator` (§7) resolves a bearer/`X-API-Key` credential against
+an `api_keys` table. Split (matches session 006's migrations=schema / seeds=data line):
+- **`api_keys` table → a goose migration** (schema; present in every environment, since
+  it's the feature's real schema).
+- **Mock keys → a dev-only `hack/sql/NNNN_seed_api_keys.sql` seed** (one user, one admin),
+  applied by compose **after** migrations to the **ephemeral** local DB.
+
+This is **safe by construction**: real deployments do not apply `hack/sql/` seeds, so the
+mock keys can never leak to production (the very footgun a `99999_MOCK_*` *migration* would
+create — migrations run everywhere). And `compose up` still demos authz end-to-end
+zero-config (the seeded keys exercise no key → 401, user key → allowed, missing role →
+403, admin key → everything via `base.cedar`). DELETE_ME flags the seed (mock data) and
+the migration + `internal/authz/apikey` (whole feature) as removal targets. **No open
+sub-decision remains here.**
 
 **D. Double-load default.** Day-one shipped policies are coarse (principal + URL
 identity) → no resource load → no double-load. Ship the request-scoped getter cache;
@@ -288,28 +307,29 @@ for the default.
   middleware entirely (escape hatch / incremental adoption).
 - `--authz-policy-dir` (optional) — load `.cedar` files from a directory instead of the
   embedded set (loaded at startup; embedded is the default).
-- `--api-keys` — the key→principal(+roles) map for the API-key authenticator (env
-  `TEMPLATE_GO_API_API_KEYS`). Empty disables all keys (the "safe variant" of §8C);
-  whether a built-in dev default applies is the §8C sub-decision.
+- (No `--api-keys` flag.) API keys live in the PostgreSQL `api_keys` table, not config —
+  the template is postgres-only and `--database-url` is already required (PR #9). Mock
+  keys are seeded dev-only via `hack/sql/` (§8C); real deployments insert their own rows.
 
 ---
 
 ## 10. What ships day-one vs. extension points
 
 **Ships (the demonstration):**
-- Base `authz` package; one global middleware; deny-by-default; the API-key
-  authenticator (per §8C); RFC 9457 rejections.
-- A `todoauthz` slice with embedded `policy.cedar`, action constants, and a fact
+- Base `authz` package; one global middleware; deny-by-default; RFC 9457 rejections.
+- The API-key authenticator (`internal/authz/apikey`) + `APIKeyStore` port + PostgreSQL
+  adapter; the `api_keys` goose migration; the dev-only `hack/sql/` mock-keys seed.
+- A `todo/authz` slice with embedded `policy.cedar`, action constants, and a fact
   resolver; the todo routes tagged with their actions.
 - A coarse reference policy (e.g. authenticated users may CRUD todos; an `admin` role
   may do anything via `base.cedar`) — exercises allow + deny without resource loads.
-- Functional/integration tests covering allow, deny (401/403), public, undeclared
-  (deny), and dev-mode.
+- Tests: unit (mockery doubles for the new ports) + functional/integration covering
+  allow, deny (401/403), public, and undeclared (deny), exercised via the seeded keys.
 
 **Documented extension points (not built):**
 - Attribute/relationship policies (`resource.owner == principal`) via the lazy
   resolver, with the double-load note.
-- Real authn (JWT/OIDC) replacing the dev authenticator.
+- Real authn (JWT/OIDC) replacing the API-key authenticator.
 - Lazy group/role resolution from an IdP/DB.
 - Cedar schema validation (experimental in `x/exp/schema` — adopt when it graduates).
 
@@ -329,30 +349,32 @@ elsewhere (rate limiting, pagination, API versioning, mockery, OTel).
 Branch `feat/authz-tier` in its own worktree; integrate via squash-merged PR; human
 gate after each phase (per `separate-mechanical-from-design-work`).
 
-- **Phase A — base `authz` package:** `go get cedar-go`; Authorizer + PolicySet merge;
-  Principal + context; Authenticator seam + API-key authenticator (redacted from logs);
-  global middleware
-  (deny-default, 401/403/500, problem+json); `Require`/`Public` declarations + Security
-  population; request-scoped lazy getter (cache + error capture); config flags;
-  `base.cedar`. Composition-root wiring with an empty contribution set.
-- **Phase B — `todoauthz` slice + wiring:** policies, actions, fact resolver
-  (todo repo-backed); register `Contribution`; tag todo routes; URL-id → Resource.
-- **Phase C — tests:** functional/integration coverage (allow/deny/public/undeclared/
-  dev-mode; URL-identity; fail-closed error path). Add `//go:build` only if needed
-  (these are hermetic — no container).
-- **Phase D — docs:** README (authz section + the modular pattern), DELETE_ME
-  (replace-the-dev-authenticator as #1; slice-removal guidance), `docs/index.md`
-  quickstart; refresh OpenAPI (`moon run openapi`) for the new `Security`.
+- **Phase A — base `authz` package + API-key authn:** `go get cedar-go`; Authorizer +
+  PolicySet merge; Principal + context; Authenticator seam + the API-key authenticator
+  (`internal/authz/apikey`) with the `APIKeyStore` port + PostgreSQL adapter + the
+  `api_keys` goose migration (key redacted from logs); global middleware (deny-default,
+  401/403/500, problem+json); `Require`/`Public` declarations + Security population;
+  request-scoped lazy getter (cache + error capture); config flags; `base.cedar`; mockery
+  doubles for the new ports. Composition-root wiring with an empty contribution set.
+- **Phase B — `todo/authz` slice + wiring:** policies, actions, fact resolver
+  (todo repo-backed); register `Contribution`; tag `httpapi` routes; URL-id → Resource.
+- **Phase C — tests:** mockery unit doubles + functional/integration coverage
+  (allow/deny/public/undeclared; URL-identity; fail-closed error path). The postgres
+  `APIKeyStore` adapter is covered in `internal/integration` (container-backed).
+- **Phase D — docs + seed:** the `hack/sql/NNNN_seed_api_keys.sql` mock-keys seed; README
+  (authz section + the modular pattern), DELETE_ME (replace the API-key authn as #1; seed +
+  slice removal guidance), `docs/index.md` quickstart; refresh OpenAPI (`moon run openapi`)
+  for the new `Security`.
 
 ---
 
 ## 13. Open questions to resolve at/after review
 
-1. **§8C built-in dev keys** — ship a default dev key set (zero-config demo) vs none
-   (safest); the one decision still needing your pick.
-2. Confirm Huma exposes the path param to middleware (`ctx.Param("todoID")` or via the
+1. Confirm Huma exposes the path param to middleware (`ctx.Param("todoID")` or via the
    chi route context) — feasibility certain (route is matched pre-middleware), exact
    accessor to verify in Phase A.
-3. Confirm cedar-go calls `EntityGetter.Get` on-demand during evaluation (interface
+2. Confirm cedar-go calls `EntityGetter.Get` on-demand during evaluation (interface
    shape implies it; verify the principal/resource aren't eagerly required) — Phase A.
-4. Policy reload: startup-only (proposed) vs hot-reload on `--authz-policy-dir`.
+3. Policy reload: startup-only (proposed) vs hot-reload on `--authz-policy-dir`.
+4. Base authz home: `internal/authz` (proposed, sibling to config/observability) vs
+   `internal/adapter/authz` — minor placement call, finalize in Phase A.
