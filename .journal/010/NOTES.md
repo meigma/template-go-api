@@ -219,3 +219,19 @@ branch force-deleted, master fast-forwarded. Invariants OK: only `master` +
 
 The user's session goal ("address security review findings") is fully met. Session
 still in-progress in INDEX; ready for session-close whenever the user calls it.
+
+## 2026-06-24 09:15 — Close
+Session closed. All three independent Codex Security findings remediated and
+squash-merged to `master` (now `f2c5210`):
+- PR #13 `ff55a2e` — `fix(authz): store API keys as SHA-256 hashes at rest` (CWE-256/522).
+- PR #14 `879e2be` — `feat(todo): paginate the list endpoint with keyset cursors` (CWE-400/770).
+- PR #15 `f2c5210` — `build(sqlc): verify the pinned sqlc binary against a committed checksum` (CWE-494).
+
+Handoff: all PRs merged + CI-green on `ubuntu-latest`; all three implementation
+worktrees removed and local `master` fast-forwarded; journal invariant clean
+(`git ls-files .journal` empty on master). `SUMMARY.md` written; INDEX row 010 →
+complete; TECH_NOTES updated with the three hardening facts + the `root:format`/
+golangci-cache/compose-seeds gotchas. No follow-up obligations. Open (pre-existing,
+not session-010 work): untracked local tooling dirs in the main checkout
+(`.agents/skills/codex-security-scan/`, `.codex-security/`, `.claude`); session 005
+still empty/in-progress in INDEX.
