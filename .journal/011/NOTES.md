@@ -83,3 +83,39 @@ through `registerResources`, so the prefix propagates consistently. The
 
 Next: implementation worktree off `master`, implement, `root:check` + container
 integration suite, PR → squash-merge.
+
+## 2026-06-24 10:23 — API versioning: shipped (PR #16, `a485f7e`)
+
+**Done.** `feat(api): serve resource routes under a /v1 version prefix` —
+**PR #16 squash-merged to `master` `a485f7e`**. Worktree removed, local `master`
+fast-forwarded, remote branch deleted, `.journal` still untracked on `master`.
+
+**The change (9 files):**
+- Core: `internal/app/app.go` — `apiVersionV1 = "/v1"` const + `registerResources`
+  now does `v1 := huma.NewGroup(api, apiVersionV1); httpapi.Register(v1, service)`.
+  Single composition point feeds both the running router and the server-less
+  spec export, so `/v1` propagates consistently. The `httpapi` adapter is
+  unchanged (version-agnostic, still declares `Path: "/todos"`).
+- Composed tests → `/v1/todos`: `app_test.go`, `integration/authz_e2e_test.go`;
+  tightened `cli/openapi_test.go` to assert `/v1/todos`. Adapter/authz UNIT tests
+  (bare-API isolation) left at `/todos` on purpose.
+- Regenerated `docs/docs/openapi.yaml` (paths → `/v1/...`; IDs/tags unchanged).
+- Docs: README (new **API versioning** section + curl + add-a-resource step),
+  `docs/docs/index.md`, `compose.yaml`, `DELETE_ME.md`.
+
+**Verification:** `root:check` green; `root:test-integration` green locally
+(`postgres:17-alpine`, 10.959s); CI green (`ci` 1m11s) and confirmed it ran
+`root:test-integration` on the runner (`internal/integration ok 14.352s`) — so
+the `/v1` routing was proven end-to-end with authz enforced on `ubuntu-latest`.
+
+**Key proof (cleared the one real risk):** Huma v2.38.0 `Group.Middlewares()`
+= parent + own, and `huma.Register` bakes `api.Middlewares()` per op (huma.go:777);
+`InstallAuthz(api)` runs before the group is created, so the deny-by-default
+authz middleware is inherited by every `/v1` route — no auth bypass. The
+integration suite's 401/403/200 matrix confirms it at runtime.
+
+Remaining loose threads (for the rest of the session): session 005 stuck
+`in-progress` in INDEX; untracked local tooling dirs in the main checkout
+(`.agents/skills/codex-security-scan/`, `.codex-security/`, `.claude/`);
+defense-in-depth checksum pinning for the other 3 Proto plugins; other
+future-slice seams (OTel tracing, rate limiting).
