@@ -233,3 +233,33 @@ whether **built-in dev keys ship** — recommended: ship a tiny user+admin defau
 zero-config demo WITH a loud warning + `--api-keys` override + DELETE_ME #1 removal
 (honors "mostly hardcoded"); safer variant = no default keys (protected routes 401 out
 of box). Still paused for user's pick on that sub-decision before the build.
+
+## 2026-06-23 17:06 — Synced sessions 006-008 (user-implemented); impact on AUTHZ_TIER
+While 005 was paused the user shipped 006 (PR #7), 007 (PR #8), 008 (PR #9). Read their
+SUMMARYs + updated TECH_NOTES. They SIMPLIFY the authz proposal (core design unchanged):
+- **008 PostgreSQL-only** (`8a46286`): `memory` adapter + `--store` toggle REMOVED;
+  `--database-url` required. → My APIKeyStore two-adapter (config+postgres) reconciliation
+  and the "preserve zero-infra `go run` authz demo" concern are MOOT — there's no memory
+  mode. API keys live in postgres, single path. Also: **mockery** adopted for test
+  doubles (Proto-pinned, `.mockery.yaml`, generated mock + `mockery-check` drift guard) →
+  new authz ports (Authenticator, APIKeyStore, EntityResolver) use mockery doubles.
+  `app.New(ctx,cfg,logger,version,...Option)` + `app.WithRepository` injection seam.
+- **006 Docker Compose** (`8b68bd4`): `compose up` runs postgres→migrate→seed→api on an
+  EPHEMERAL DB; drop-in `hack/sql/*.sql` seeds applied AFTER migrations by a psql one-shot
+  (explicitly NOT migrations, NOT the postgres init-dir). → "day one = compose up" is BUILT
+  (not future). The user's `99999_MOCK_API_KEYS.sql` *migration* idea is SUPERSEDED by the
+  better, already-built pattern: api_keys TABLE → goose migration (schema, shared
+  `internal/adapter/postgres/migrations`); mock KEYS → `hack/sql/` seed (data, dev-only,
+  ephemeral → never reaches a real deploy). This RESOLVES §8C safely-by-construction (a
+  migration would run in prod too — exactly the footgun 006 avoided).
+- **007 per-domain layout** (`1f1e5a7`): adapters nested under the domain —
+  `internal/todo/{httpapi,postgres}`; shared infra stays `internal/adapter/{http,postgres}`.
+  → doc's `todoapi` becomes `httpapi`; the `todo/authz` slice is consistent; the base-vs-
+  slice `authz` package-name collision matches the established `todopostgres` alias
+  precedent (alias the slice `todoauthz`). The user's earlier "I'll fix todoapi later" =
+  DONE (it's `httpapi` now).
+
+Proposing doc edits to sync (no design change): per-domain paths + httpapi + alias note;
+API-key store = postgres-backed (drop config/two-adapter + `--api-keys`); api_keys table
+migration + `hack/sql/` mock-keys seed; §8C resolved via dev-only seed; mockery for new
+ports; remove `--store`. Awaiting user go-ahead to apply, then build.
