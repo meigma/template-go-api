@@ -65,7 +65,7 @@ curl -sS -X POST localhost:8080/todos \
   -H 'X-API-Key: dev-user-key' \
   -H 'content-type: application/json' \
   -d '{"title":"buy milk"}'
-# => 201 {"id":"...","title":"buy milk","status":"open","createdAt":"...","completedAt":null}
+# => 201 {"$schema":"...","id":"...","title":"buy milk","status":"open","createdAt":"..."}
 
 curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos               # list
 curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/todos/<id>          # fetch one (404 if unknown)

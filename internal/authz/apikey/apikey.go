@@ -8,9 +8,9 @@
 // The shipped store is PostgreSQL-backed (store.go); keys live in an api_keys
 // table since the template is postgres-only. The package hand-writes its single
 // query rather than adding a second sqlc package, so removal stays surgical for
-// the Go code. The api_keys table lives in the shared migrations directory, so
-// the todo sqlc package generates an unused ApiKey model from it; removing the
-// feature also drops that table and regenerates the todo sqlc package.
+// the Go code. The api_keys table lives in the shared migrations directory, but
+// sqlc.yaml sets omit_unused_structs, so the todo sqlc package emits no ApiKey
+// model and removing the feature needs no sqlc regeneration.
 package apikey
 
 import (
