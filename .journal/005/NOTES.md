@@ -492,3 +492,14 @@ core untouched/Cedar-free; mockery for the new ports; omit_unused_structs keeps 
 Branch held LOCAL (unsigned `--no-gpg-sign` intermediate commits — squashed at merge). PAUSED
 for gate-4 approval → then push branch + `gh pr create` (squash-merge PR for the user's review).
 Follow-up still open (unchanged): wire `test-integration` into CI once a Docker runner exists.
+
+## 2026-06-23 19:48 — Gate 4 approved ("LGTM"); PR #10 opened, CI running
+Pushed `feat/authz-tier` to origin and opened **PR #10**
+(https://github.com/meigma/template-go-api/pull/10), base `master`, squash-merge, title
+`feat(authz): add Cedar-based authorization tier with deferred API-key authn`. Body covers
+design + the 4 gated phases + day-one demo + config + testing + removal + the CI follow-up.
+Initial checks: ci/Pages/Kusari pending (release+container dry-runs skip on PRs as expected);
+mergeable=MERGEABLE, mergeStateStatus=UNSTABLE (checks not done). Watching checks to
+completion in the background (`gh pr checks 10 --watch`, bg id b3hrna1z4). Will report
+pass/fail. Note: Kusari may flag new transitive CVEs/licenses (it did on PR #6 — x/crypto);
+if it fails, inspect + pin like session 004 did, then re-run. Not merging — user reviews/merges.
