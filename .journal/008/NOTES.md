@@ -175,3 +175,18 @@ errors) and "Save never called" assertions, and as a template it's the
 skill-mandated reference pattern downstream inherits. User agreed: fine as-is.
 
 Session goal met. Ready for `session-close`.
+
+## 2026-06-23 16:59 — Close
+Session closed. Goal met: in-memory tier + `--store` removed, PostgreSQL-only,
+`--database-url` required; mockery adopted for repository test doubles.
+- Merged: **PR #9** `8a46286` (`refactor(store): drop the in-memory adapter,
+  ship PostgreSQL-only (#9)`), squash-merged to `master`.
+- Repo `template-go-api`: local `master` fast-forwarded to `8a46286`; impl
+  worktree removed; remote branch deleted. No journal contamination on master
+  (`git ls-files .journal` empty).
+- Journal: wrote `008/SUMMARY.md`; flipped INDEX 008 → complete; revised
+  `TECH_NOTES.md` (memory tier removed, `--store` gone, `app.WithRepository`
+  seam, mockery convention; "planned PostgreSQL-only" → done).
+- Note: session **005** is still a dangling empty `in-progress` row (left
+  untouched per the close-target decision); future cleanup could mark it
+  `abandoned`.
