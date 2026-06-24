@@ -286,8 +286,9 @@ schema for fast per-test isolation. It requires a running Docker daemon:
 moon run root:test-integration   # or: go test -tags integration ./internal/integration/...
 ```
 
-Wiring `test-integration` into CI is a follow-up: the GitHub workflows are
-currently `.disabled` and need a Docker-capable runner.
+The container-backed integration suite runs in CI through `moon ci` on the
+Docker-capable `ubuntu-latest` runner. It stays out of the hermetic
+`moon run root:check` aggregate, so a local `check` never needs Docker.
 
 ### Dynamic queries
 

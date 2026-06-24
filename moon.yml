@@ -45,7 +45,7 @@ fileGroups:
     - 'ghd.toml'
     - 'release-please-config.json'
     - '.release-please-manifest.json'
-    - '.github/workflows.disabled/**/*.yml'
+    - '.github/workflows/release*.yml'
 
 workspace:
   inheritedTasks:
@@ -187,9 +187,9 @@ tasks:
 
   # Run the container-backed integration suite (gated by the `integration` build
   # tag, so the default `test`/`check` stay hermetic). Requires a running Docker
-  # daemon; testcontainers starts a throwaway Postgres per run. Wiring this into
-  # CI is a follow-up — the GitHub workflows are currently `.disabled` and need a
-  # Docker-capable runner.
+  # daemon; testcontainers starts a throwaway Postgres per run. It runs in CI
+  # (`runInCI: true`) on the Docker-capable `ubuntu-latest` runner, but stays out
+  # of the hermetic `check` aggregate so a local `check` needs no Docker.
   test-integration:
     command: 'go test -tags integration ./internal/integration/...'
     toolchains: ['go']
@@ -198,7 +198,7 @@ tasks:
       - 'internal/adapter/postgres/migrations/*.sql'
     options:
       cache: false
-      runInCI: false
+      runInCI: true
 
   # Run the embedded database migrations for local development. Pass the goose
   # verb and connection URL through, for example:
