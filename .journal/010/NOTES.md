@@ -78,3 +78,18 @@ as SHA-256 hashes at rest`. CI watching (`gh pr checks 13 --watch`); this PR
 touches `.go`+migration so it should actually exercise `test-integration` on the
 runner. Next: merge on green, clean up worktree. Findings 1 and 3 still pending
 from the user.
+
+## 2026-06-23 22:13 — Finding 2/3 merged (PR #13 `ff55a2e`)
+CI green on the runner — confirmed `root:test-integration | ok internal/integration
+15.169s` actually executed on `ubuntu-latest` (PR touched `.go`+migration, so
+affected-gating ran it; not a self-proving config-only PR). Also pass: `ci`,
+GitHub Pages, Kusari Inspector. Squash-merged PR #13 → `master ff55a2e`
+(`fix(authz): store API keys as SHA-256 hashes at rest`).
+
+Cleanup done: remote branch deleted, `wt remove`'d the worktree (it reported the
+branch "unmerged" — expected for squash-merge — so force-deleted the local branch
+`git branch -D`), local `master` fast-forwarded to `ff55a2e`. Invariants OK:
+only `master` + `journal/jmgilman` remain; `git ls-files .journal` empty on master.
+
+Finding 2/3 COMPLETE. Findings 1 and 3 not yet shared by the user — session stays
+open for them.
