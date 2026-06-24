@@ -2,8 +2,7 @@
 .moon/cache/
 .moon/docker/
 
-# Agent/runtime state
-.agents/
+# Agent/runtime state (`.agents/skills` is committed template content, not ignored)
 .claude/
 .journal/
 .wt/

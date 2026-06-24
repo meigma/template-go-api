@@ -36,8 +36,6 @@ var (
 	ActionRead = types.NewEntityUID(actionType, "todo:read")
 	// ActionUpdate authorizes updating a todo (for example, completing it).
 	ActionUpdate = types.NewEntityUID(actionType, "todo:update")
-	// ActionDelete authorizes deleting a todo.
-	ActionDelete = types.NewEntityUID(actionType, "todo:delete")
 	// ActionList authorizes listing todos.
 	ActionList = types.NewEntityUID(actionType, "todo:list")
 )
@@ -45,5 +43,5 @@ var (
 // actions lists every action this slice declares, recorded on the Contribution
 // for discovery and validation.
 func actions() []types.EntityUID {
-	return []types.EntityUID{ActionCreate, ActionRead, ActionUpdate, ActionDelete, ActionList}
+	return []types.EntityUID{ActionCreate, ActionRead, ActionUpdate, ActionList}
 }
