@@ -281,3 +281,17 @@ Doc is now build-ready. Remaining items are Phase-A feasibility checks (Huma pat
 accessor; cedar-go on-demand `Get`) + the minor `internal/authz` vs `internal/adapter/authz`
 home — none blocking. NEXT: on user's go, kick off the gated build, Phase A, on branch
 `feat/authz-tier` (own worktree off fetched master, squash-merged PR; human gate per phase).
+
+## 2026-06-23 17:27 — Build started: Phase A workflow launched (user: "LGTM. Proceed")
+Created impl worktree `feat/authz-tier` off `origin/master` (`8a46286`, postgres-only) at
+`.wt/feat-authz-tier`. Launched gated Phase A workflow `implement-authz-phase-a` (run
+`wf_c627ba40-aa0`, task `w78akg3th`): implement → 3 adversarial reviewers (correctness /
+doc-adherence / conventions) → fix → validate, all operating IN the impl worktree with
+`AUTHZ_TIER.md` as source of truth (read from the journal worktree). Key guardrails baked
+into the workflow: agents work only in `.wt/feat-authz-tier` (never the journal/master
+worktrees, no `.journal/` edits); commit with `--no-gpg-sign` (background can't touch the
+yubikey; squashed at PR time anyway); keep `moon run root:check` green; **Phase A defaults
+`--authz-enabled=false`** so deny-default + empty contributions don't 403 the untagged
+existing routes (Phase B tags routes + flips to true); API-key store = hand-written pgx vs
+the api_keys migration (no 2nd sqlc pkg); mockery for the new ports. Awaiting completion →
+human gate before Phase B.
