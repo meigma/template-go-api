@@ -26,7 +26,12 @@ your own resource and keep the persistence wiring.
 
 The `sqlc`, `goose`, and `mockery` CLIs are pinned in `.prototools` and run
 through Proto, so they are fetched on demand by Moon — there is nothing to install
-by hand.
+by hand. Each Proto plugin verifies its download: `goose`, `mockery`, and
+`golangci-lint` check the upstream checksum file (`checksum-url`), while `sqlc`
+(which publishes no checksum) is verified by the `sqlc-verify` task against a
+repo-pinned digest in `.moon/proto/sqlc.sha256` before it runs. Bumping the `sqlc`
+version in `.prototools` therefore also means refreshing those digests — the
+regeneration recipe is in that file's header.
 
 > **New repository from this template?** Work through [DELETE_ME.md](DELETE_ME.md)
 > first — it covers renaming the module, binary, image, and env prefix, and
