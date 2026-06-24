@@ -24,10 +24,10 @@ const (
 	defaultLogLevel          = "info"
 	defaultLogFormat         = "json"
 	defaultDBMaxConns        = 0
-	// defaultAuthzEnabled is false in this phase: the engine ships with an empty
-	// contribution set and a deny-by-default posture, so enabling it before
-	// routes are tagged would reject every untagged operation. A later phase
-	// tags routes and flips this to true.
+	// defaultAuthzEnabled is false: the engine ships with an empty contribution
+	// set and a deny-by-default posture, so enabling it before routes carry an
+	// authorization declaration would reject every untagged operation. Operators
+	// enable it once their routes declare Require/Public.
 	defaultAuthzEnabled = false
 )
 
@@ -69,8 +69,8 @@ type Config struct {
 	DBMaxConns int32
 	// AuthzEnabled is the authorization master switch. When false the authz
 	// middleware is inert (pass-through), the escape hatch for incremental
-	// adoption. It defaults to false this phase (the engine ships with no tagged
-	// routes, and deny-by-default would otherwise reject them all).
+	// adoption. It defaults to false: until routes carry an authorization
+	// declaration, deny-by-default would otherwise reject them all.
 	AuthzEnabled bool
 	// AuthzPolicyDir optionally loads .cedar policy files from a directory
 	// instead of the embedded set. Empty (the default) uses the embedded

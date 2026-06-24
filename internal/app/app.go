@@ -1,6 +1,6 @@
 // Package app is the composition root: it wires the domain service, the
-// PostgreSQL persistence adapter, observability, and the HTTP server into a
-// runnable App.
+// PostgreSQL persistence adapter, the authorization engine and API-key
+// authenticator, observability, and the HTTP server into a runnable App.
 package app
 
 import (
@@ -156,17 +156,18 @@ func resolveStore(
 
 // authzInstaller builds the authorization engine and returns a hook that
 // installs the authn/authz Huma middleware on the API. The Authorizer is built
-// from an empty contribution set (only the base cross-cutting policies) this
-// phase; a later phase passes each domain slice's Contribution. The API-key
-// authenticator is PostgreSQL-backed, so it requires a pool when authorization
-// is enabled. The middleware is inert when cfg.AuthzEnabled is false, which is
-// the default until routes are tagged — keeping every untagged route working.
+// from an empty contribution set (only the base cross-cutting policies); a later
+// slice passes each domain's Contribution. cfg.AuthzPolicyDir, when set, loads
+// the base policies from that directory instead of the embedded base.cedar. The
+// API-key authenticator is PostgreSQL-backed, so it requires a pool when
+// authorization is enabled. The middleware is inert when cfg.AuthzEnabled is
+// false, keeping every untagged route working.
 func authzInstaller(
 	cfg config.Config,
 	pool *pgxpool.Pool,
 	logger *slog.Logger,
 ) (func(huma.API), error) {
-	authorizer, err := authz.New(nil)
+	authorizer, err := authz.New(nil, authz.WithPolicyDir(cfg.AuthzPolicyDir))
 	if err != nil {
 		return nil, fmt.Errorf("build authorizer: %w", err)
 	}

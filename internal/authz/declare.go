@@ -35,17 +35,18 @@ type declaration struct {
 	action types.EntityUID
 	// idParam, when non-empty, names the path parameter the middleware reads to
 	// build an instance-level Resource (Type::"<id>"); empty binds the
-	// type-level resource for collection operations. Used in Phase B.
+	// type-level resource for collection operations.
 	idParam string
 }
 
 // Require declares that an operation requires authorization for action. With an
 // optional idParam, the middleware builds an instance-level resource from that
 // path parameter (Type::"<id>"); without it, the resource is type-level (for
-// collection operations). The returned map is assigned to Operation.Metadata;
-// it also carries the OpenAPI Security requirement under the "security" key so a
-// registrar can spread it onto Operation.Security, making the requirement
-// visible in the generated docs. Only the first idParam is used.
+// collection operations). The returned map is assigned to Operation.Metadata.
+// ApplySecurity (run when the middleware is installed) reads this declaration
+// and sets the operation's OpenAPI Security, so the requirement is visible in
+// the generated docs without the registrar copying it by hand. Only the first
+// idParam is used.
 func Require(action types.EntityUID, idParam ...string) map[string]any {
 	var id string
 	if len(idParam) > 0 {
@@ -54,7 +55,6 @@ func Require(action types.EntityUID, idParam ...string) map[string]any {
 
 	return map[string]any{
 		metadataKey: &declaration{kind: kindRequire, action: action, idParam: id},
-		"security":  SecurityRequirement(),
 	}
 }
 
@@ -70,10 +70,49 @@ func Public() map[string]any {
 
 // SecurityRequirement returns the OpenAPI security requirement for a protected
 // operation, referencing the API-key scheme registered by RegisterSecurityScheme.
-// Require embeds it in the operation metadata; registrars may also assign it to
-// Operation.Security directly.
+// ApplySecurity assigns it to a required operation's Security field.
 func SecurityRequirement() []map[string][]string {
 	return []map[string][]string{{SecuritySchemeName: {}}}
+}
+
+// ApplySecurity sets the OpenAPI Security requirement on every operation that
+// Require declared, so a protected route advertises its security scheme in the
+// generated document. Public and undeclared operations are left untouched. It is
+// run once when the middleware is installed, after the operations are
+// registered, so a registrar only writes Metadata: Require(...) and the
+// requirement still reaches the spec.
+func ApplySecurity(api huma.API) {
+	for _, item := range api.OpenAPI().Paths {
+		for _, op := range pathOperations(item) {
+			decl, ok := declarationFrom(op)
+			if !ok || decl.kind != kindRequire {
+				continue
+			}
+			op.Security = SecurityRequirement()
+		}
+	}
+}
+
+// pathOperations returns the non-nil operations defined on item, one per HTTP
+// method, so callers can iterate a path's operations without repeating the
+// method-by-method field access.
+func pathOperations(item *huma.PathItem) []*huma.Operation {
+	if item == nil {
+		return nil
+	}
+
+	candidates := []*huma.Operation{
+		item.Get, item.Put, item.Post, item.Delete,
+		item.Options, item.Head, item.Patch, item.Trace,
+	}
+	ops := make([]*huma.Operation, 0, len(candidates))
+	for _, op := range candidates {
+		if op != nil {
+			ops = append(ops, op)
+		}
+	}
+
+	return ops
 }
 
 // RegisterSecurityScheme declares the API-key security scheme on api's OpenAPI
@@ -93,11 +132,11 @@ func RegisterSecurityScheme(api huma.API) {
 }
 
 // resourceTypeFromAction derives the type-level Cedar resource for an action.
-// By the naming convention (§8A) an action is Action::"<resource>:<verb>"; the
+// By the naming convention an action is Action::"<resource>:<verb>"; the
 // resource type is the PascalCased <resource> segment (todo -> Todo), with no
-// instance id. Phase B refines this to an instance resource when an idParam is
-// declared. An action without the "<resource>:" prefix yields a zero resource,
-// which coarse principal-only policies (for example the admin override) ignore.
+// instance id. An action without the "<resource>:" prefix yields a zero
+// resource, which coarse principal-only policies (for example the admin
+// override) ignore.
 func resourceTypeFromAction(action types.EntityUID) types.EntityUID {
 	resource, _, found := strings.Cut(string(action.ID), ":")
 	if !found || resource == "" {

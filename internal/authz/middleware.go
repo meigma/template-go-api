@@ -27,7 +27,7 @@ const genericUnauthorized = "authentication is required to perform this action"
 
 // Middleware bundles the authentication and authorization Huma middleware behind
 // one switch. When disabled it is inert (pass-through), so the template stays
-// green before any route is tagged; Phase B tags routes and enables it.
+// green before any route carries an authorization declaration.
 type Middleware struct {
 	authenticator Authenticator
 	authorizer    *Authorizer
@@ -60,16 +60,19 @@ func NewMiddleware(
 	}
 }
 
-// Install registers the authn and authz middleware on the API and declares the
-// API-key security scheme. It is a no-op when the middleware is disabled, so all
-// operations run unauthenticated and unauthorized — the Phase A default that
-// keeps untagged routes (and their tests) working until Phase B tags them.
+// Install registers the authn and authz middleware on the API, declares the
+// API-key security scheme, and stamps the OpenAPI Security requirement onto every
+// operation that Require declared. It must run after the operations are
+// registered so ApplySecurity sees them. It is a no-op when the middleware is
+// disabled, so all operations run unauthenticated and unauthorized — the default
+// that keeps untagged routes (and their tests) working until they are tagged.
 func (m *Middleware) Install() {
 	if !m.enabled {
 		return
 	}
 
 	RegisterSecurityScheme(m.api)
+	ApplySecurity(m.api)
 	m.api.UseMiddleware(m.authenticate, m.authorize)
 }
 
@@ -88,7 +91,7 @@ func (m *Middleware) authenticate(ctx huma.Context, next func(huma.Context)) {
 		return
 	}
 
-	next(huma.WithValue(ctx, principalKey{}, principal))
+	next(huma.WithContext(ctx, WithPrincipal(ctx.Context(), principal)))
 }
 
 // authorize enforces the operation's authorization declaration. Deny-by-default:
@@ -123,16 +126,22 @@ func (m *Middleware) authorize(ctx huma.Context, next func(huma.Context)) {
 		m.deny(ctx, principal)
 	case decisionError:
 		m.writeErr(ctx, http.StatusInternalServerError, "authorization is temporarily unavailable")
+	default:
+		// Fail closed: an unrecognized outcome (including the zero value) is
+		// treated as an error rather than allowed.
+		m.writeErr(ctx, http.StatusInternalServerError, "authorization is temporarily unavailable")
 	}
 }
 
-// outcome is the resolved authorization result the middleware acts on.
+// outcome is the resolved authorization result the middleware acts on. The zero
+// value is decisionError so any unset or unhandled outcome fails closed, keeping
+// the decision pipeline deny-by-default by construction.
 type outcome int
 
 const (
-	decisionAllow outcome = iota
+	decisionError outcome = iota
+	decisionAllow
 	decisionDeny
-	decisionError
 )
 
 // evaluate builds the Cedar request for decl, runs the authorizer over a
@@ -142,9 +151,9 @@ const (
 func (m *Middleware) evaluate(ctx huma.Context, principal Principal, decl *declaration) outcome {
 	getter := newGetter(ctx.Context(), principal, m.authorizer.Contributions())
 
-	// Phase A binds the resource at the type level (Action's namespace is the
-	// resource type by convention). URL-id binding to an instance resource is
-	// Phase B; idParam is recorded on the declaration for that step.
+	// The resource is bound at the type level (the action's resource segment by
+	// convention). Instance binding from decl.idParam is not yet implemented;
+	// idParam is recorded on the declaration for that step.
 	req := cedar.Request{
 		Principal: principal.UID,
 		Action:    decl.action,
@@ -175,9 +184,10 @@ func (m *Middleware) evaluate(ctx huma.Context, principal Principal, decl *decla
 	return decisionDeny
 }
 
-// resourceFor builds the Cedar resource entity for decl. Phase A returns a
-// type-level resource derived from the action's resource segment; Phase B will
-// read decl.idParam from ctx to build an instance-level Type::"<id>".
+// resourceFor builds the Cedar resource entity for decl. It returns a type-level
+// resource derived from the action's resource segment; instance binding that
+// reads decl.idParam from ctx to build an instance-level Type::"<id>" is not yet
+// implemented.
 func resourceFor(decl *declaration, _ huma.Context) cedar.EntityUID {
 	return resourceTypeFromAction(decl.action)
 }

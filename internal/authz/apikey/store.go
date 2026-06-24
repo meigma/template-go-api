@@ -14,11 +14,11 @@ import (
 // self-contained and trivially removable — it deliberately does not introduce a
 // second sqlc package.
 //
-// SECURITY: this day-one implementation stores and matches keys verbatim. The
+// SECURITY: this implementation stores and matches keys verbatim. The
 // production hardening path is to store only a hash of the key (for example
 // SHA-256) and compare in constant time (crypto/subtle.ConstantTimeCompare)
 // after hashing the presented key, so a leaked table dump does not reveal usable
-// credentials and lookups are not timing-distinguishable. See DELETE_ME.
+// credentials and lookups are not timing-distinguishable.
 const lookupQuery = `SELECT subject, roles FROM api_keys WHERE key = $1`
 
 // Store is the PostgreSQL-backed APIKeyStore. It resolves keys against the
