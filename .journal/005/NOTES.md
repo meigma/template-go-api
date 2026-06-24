@@ -403,3 +403,17 @@ trim); two NewMiddleware instances (not a defect).
 Minor decision worth a user nod: complete-todo → `ActionUpdate`; `{id}` param (not the
 doc's illustrative `{todoID}`); `ActionDelete` declared w/o a route. Branch held local.
 PAUSED for gate-2 → Phase C (container-backed integration + functional allow/deny).
+
+## 2026-06-23 19:04 — Gate 2 approved ("LGTM. Proceed."); Phase C launched
+User approved Phase B; ActionDelete kept as-is (full CRUD vocab). Launched gated Phase C
+workflow `implement-authz-phase-c` (run `wf_415d45a2-0ee`, task `w4clvziyw`) on
+`feat/authz-tier` (reviewBase `299525d`). Scope: container-backed integration tests in
+`internal/integration` — (1) the REAL postgres `APIKeyStore`/Authenticator (insert api_keys
+rows, resolve → principal+roles, unknown→miss, roles[] parsing); (2) end-to-end functional
+authz through the FULL stack with authz ENABLED + the real postgres authenticator (no
+key→401, user key→allowed CRUD, insufficient role→403, admin→allowed via base, URL-id
+instance binding on a by-id route). Default `go test ./...` stays hermetic (tag-gated).
+Review lens tuned for the TEST-phase risk = false greens (stub/disabled authz, allow/deny
+not distinguished, container not used). Validate runs BOTH `root:check` and
+`test-integration` (real container; Docker worked in session 004's workflow). Awaiting
+completion → gate-3.
