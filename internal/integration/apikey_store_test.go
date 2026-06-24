@@ -42,14 +42,14 @@ func apiKeyContext(key string) huma.Context {
 }
 
 // TestAPIKeyStoreAdapter exercises the real PostgreSQL-backed apikey.Store and
-// the apikey.Authenticator against the container database. The design defers the
-// adapter's coverage to this suite ("the postgres APIKeyStore adapter is covered
-// in internal/integration"). Rows are inserted directly, then resolved through
-// the shipped store and authenticator, so the hand-written lookup query, the
-// text[] roles column, and the principal mapping are all exercised together. It
-// shares one migrated container (the fixture applies migration 00002, so the
-// api_keys table exists) and restores the clean snapshot between subtests for
-// isolation, so the subtests run sequentially rather than in parallel.
+// the apikey.Authenticator against the container database — the only place the
+// hand-written lookup query and the text[] roles column run against real
+// PostgreSQL. Rows are inserted directly, then resolved through the shipped store
+// and authenticator, so the lookup query, the text[] roles column, and the
+// principal mapping are all exercised together. It shares one migrated container
+// (the fixture applies migration 00002, so the api_keys table exists) and restores
+// the clean snapshot between subtests for isolation, so the subtests run
+// sequentially rather than in parallel.
 func TestAPIKeyStoreAdapter(t *testing.T) {
 	ctx := context.Background()
 	fix := setupPostgres(ctx, t)

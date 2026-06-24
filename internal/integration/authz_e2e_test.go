@@ -118,9 +118,12 @@ func createdID(t *testing.T, body string) string {
 // authorization enabled and a real PostgreSQL-backed api-key authenticator. It
 // seeds a user-role key, an admin-role key, and a roleless key directly into the
 // api_keys table, then asserts the real decision matrix: no credential -> 401,
-// an unauthorized role -> 403, a user key -> 2xx on every granted todo route, an
-// admin key -> allowed via base.cedar, and the URL-identity by-id routes
-// (get/complete) resolving Resource = Todo::"<id>" for a todo created over HTTP.
+// an unauthorized role -> 403, a user key -> 2xx on every granted todo route, and
+// an admin key -> allowed via base.cedar. The by-id routes (get/complete) confirm
+// those routes are reachable, authorized for the granted role, and return the
+// correct instance; the Resource = Todo::"<id>" binding itself is guarded by the
+// unit test TestMiddlewareBindsURLIDToResource, since the coarse policy here is
+// resource-agnostic and cannot distinguish the bound id.
 //
 // It shares one migrated container and seeds the api_keys rows once after a clean
 // restore; the app connects its own pool to the same database, so the request
@@ -139,8 +142,7 @@ func TestAuthzEndToEnd(t *testing.T) {
 	srv := e2eServer(ctx, t, fix.url)
 
 	t.Run("NoCredentialIsUnauthorized", func(t *testing.T) {
-		// Anonymous on a protected route -> 401 (the design's no-principal + deny
-		// path), not 403.
+		// Anonymous on a protected route -> 401 (no principal + deny path), not 403.
 		got := e2eRequest(t, srv, http.MethodGet, "/todos", "")
 		assert.Equal(t, http.StatusUnauthorized, got.status, got.body)
 
@@ -168,9 +170,10 @@ func TestAuthzEndToEnd(t *testing.T) {
 		listed := e2eRequest(t, srv, http.MethodGet, "/todos", "", apiKey("user-key"))
 		assert.Equal(t, http.StatusOK, listed.status, listed.body)
 
-		// get by id (URL-identity: Resource = Todo::"<id>") -> 200 for the todo
-		// created above, proving the path param feeds the Cedar resource and the
-		// coarse user policy still allows it.
+		// get by id -> 200 for the todo created above: the by-id route is reachable,
+		// authorized for the user role, and returns the same instance. (The
+		// Resource = Todo::"<id>" binding is proven in TestMiddlewareBindsURLIDToResource;
+		// the coarse policy here allows any resource.)
 		fetched := e2eRequest(t, srv, http.MethodGet, "/todos/"+id, "", apiKey("user-key"))
 		assert.Equal(t, http.StatusOK, fetched.status, fetched.body)
 		assert.Equal(t, id, createdID(t, fetched.body))
