@@ -21,12 +21,15 @@ import (
 
 // seedAPIKey inserts an api_keys row directly through the pool, so the store is
 // resolved against rows it did not write — proving the real query and the real
-// schema (text[] roles column) round-trip together.
+// schema (text[] roles column) round-trip together. It takes the plaintext key
+// and stores its SHA-256 digest via encode(sha256(...::bytea), 'hex'); the store
+// hashes the presented key in Go, so a successful lookup proves the SQL-side and
+// Go-side hashing agree.
 func seedAPIKey(ctx context.Context, t *testing.T, pool *pgxpool.Pool, key, subject string, roles []string) {
 	t.Helper()
 
 	_, err := pool.Exec(ctx,
-		`INSERT INTO api_keys (key, subject, roles) VALUES ($1, $2, $3)`,
+		`INSERT INTO api_keys (key_hash, subject, roles) VALUES (encode(sha256($1::bytea), 'hex'), $2, $3)`,
 		key, subject, roles,
 	)
 	require.NoError(t, err)
@@ -97,13 +100,15 @@ func TestAPIKeyStoreAdapter(t *testing.T) {
 
 		store := apikey.NewStore(pool)
 
-		// A prefix of a stored key must not match: the lookup is an exact equality
-		// on the primary key, not a LIKE/prefix scan.
+		// A prefix of a stored key must not match: the lookup hashes the presented
+		// key and matches the digest on the key_hash primary key — a different
+		// input yields a different SHA-256, never a prefix/LIKE match.
 		_, ok, err := store.Lookup(ctx, "secret")
 		require.NoError(t, err)
 		assert.False(t, ok, "a partial key must not resolve to a stored row")
 
-		// A trailing-space variant is likewise a distinct key and must miss.
+		// A trailing-space variant is likewise a distinct key (distinct digest) and
+		// must miss.
 		_, ok, err = store.Lookup(ctx, "secret-key ")
 		require.NoError(t, err)
 		assert.False(t, ok, "a key with trailing whitespace must not match a stored row")
@@ -114,7 +119,8 @@ func TestAPIKeyStoreAdapter(t *testing.T) {
 		// roles defaults to '{}' (the migration's column default), so a row with no
 		// roles resolves to an empty, non-nil slice — a principal with no role.
 		_, err := pool.Exec(ctx,
-			`INSERT INTO api_keys (key, subject) VALUES ($1, $2)`, "no-roles", "nobody")
+			`INSERT INTO api_keys (key_hash, subject) VALUES (encode(sha256($1::bytea), 'hex'), $2)`,
+			"no-roles", "nobody")
 		require.NoError(t, err)
 
 		store := apikey.NewStore(pool)

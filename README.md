@@ -348,11 +348,12 @@ starting point**: an API-key authenticator (`internal/authz/apikey`).
 The shipped authenticator reads a key from the `X-API-Key` header or an
 `Authorization: Bearer <key>` credential and resolves it through an `APIKeyStore`
 port to a principal (subject + roles). The shipped store is PostgreSQL-backed:
-keys live in the `api_keys` table (created by migration
-`00002_create_api_keys.sql`). This is a real but minimal mechanism — enough to
-demonstrate the full flow — not production authn. It stores keys verbatim; the
-hardening path (hash + constant-time compare) and replacement with real authn are
-called out in [DELETE_ME.md](DELETE_ME.md).
+the `api_keys` table (created by migration `00002_create_api_keys.sql`) stores
+only a **SHA-256 hash** of each key (`key_hash`), never the key itself, and the
+store hashes the presented credential before lookup — so a table or backup
+disclosure exposes no replayable credentials. This is still a real but minimal
+mechanism — enough to demonstrate the full flow — **not** production authn:
+replacing it with a real verifier is called out in [DELETE_ME.md](DELETE_ME.md).
 
 For local development the Compose stack seeds two mock keys via
 `hack/sql/0002_seed_api_keys.sql`:
