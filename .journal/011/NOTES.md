@@ -363,3 +363,20 @@ rate limiting, #18 tracing, #19 housekeeping (gitignore + checksum docs), #20
 `.claude` symlink gitignore fix. `master` at `5d120e2`, working tree clean, all
 worktrees/branches cleaned up, `.journal` untracked on master. Ready for
 session close (SUMMARY.md) on user request.
+
+## 2026-06-24 13:45 — Close
+
+Session 011 closed. All work was landed during the session (PRs reviewed and
+squash-merged as we went), so close-out Phase 1 was verify-only: main checkout
+clean, only `master` + `journal/jmgilman` worktrees, PRs #16–#20 all MERGED,
+`master` fast-forwarded to `5d120e2`, no `.journal` contamination on master.
+
+Handoff state: the template is feature-complete with no remaining "future seam"
+backlog — API versioning (`/v1`), per-client rate limiting, and OTel tracing are
+built; pagination/authz/persistence/compose/CI were already in place. Working
+tree is clean (the `.claude` symlink no longer shows untracked after #20).
+
+Recorded: `SUMMARY.md` (postmortem), `INDEX.md` row 011 → `complete`,
+`TECH_NOTES.md` updated (the three new tiers + the gitignore-symlink &
+checksum-pinning gotchas; removed the obsolete "future seams" list). Merged PRs:
+#16 `a485f7e`, #17 `867662f`, #18 `6625ab1`, #19 `95ecd8a`, #20 `5d120e2`.
