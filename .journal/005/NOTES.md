@@ -445,3 +445,18 @@ DeniesUndeclaredOperation — would need synthetic routes).
 
 Branch `feat/authz-tier` = 8 commits, held local. PAUSED for gate-3 → Phase D (docs +
 `hack/sql` mock-keys seed + README/DELETE_ME + docs/index) then squash-merge PR.
+
+## 2026-06-23 19:25 — Gate 3 approved ("LGTM"); Phase D (final) launched
+Launched gated Phase D workflow `implement-authz-phase-d` (run `wf_19a23100-9f7`, task
+`w32tnxu0z`) on `feat/authz-tier` (reviewBase `3728663`). Scope: dev-only
+`hack/sql/0002_seed_api_keys.sql` mock-keys seed (user+admin roles matching the policy;
+loud INSECURE/dev-only/ephemeral comment; ON CONFLICT like 0001); README Authorization
+section + the modular per-resource authz-slice pattern + compose demo with the seeded keys;
+DELETE_ME removal recipe ("replace the API-key authn" = #1; full surgical-removal list +
+the omit_unused_structs no-regen note); docs/index quickstart with authz on; `moon run
+openapi` (expect no drift, security committed in B). CAPSTONE: a real `docker compose up
+--build` functional check of the day-one demo (no key→401, dev-user-key→200, create→201,
+admin→200) then `down -v`. Review lens tuned for the docs-phase risk = INACCURACY (flag/
+header/route/key/role/curl must match code; the prior repo docs phase shipped a /readyz
+shape bug — don't repeat). Validate = root:check + doc/code consistency (no recompose).
+Awaiting completion → gate-4 → then open the squash-merge PR.
