@@ -31,3 +31,9 @@ Goal for the checkpoint: Determine why release PR #21 has a failing workflow.
 What was found: The main `ci` check passed. The blocking failure is `Container Image Dry Run` in the `Release Dry Run` workflow run `28251912429`, job `83705610805`.
 Root cause: The `Smoke test local image` step in `.github/workflows/release-dry-run.yml` runs `docker run --rm template-go-api:dry-run --message "hello from container"`, but the built API-server binary has no `--message` flag. The container successfully runs `--version` first, then exits with `unknown flag: --message`.
 Current state: PR #21 only changes `.release-please-manifest.json` and `CHANGELOG.md`; the failure is a stale release dry-run smoke-test command, not a release-please content issue.
+
+## 2026-06-26 10:10 — Release dry-run smoke-test fix
+Goal for the checkpoint: Fix the stale release dry-run container smoke test so release PR #21 can pass.
+What was done: Created Worktrunk branch `feat/release-dry-run-smoke`, replaced the invalid `--message` container command with `docker run --rm template-go-api:dry-run openapi | grep -Fq "openapi: 3.0.3"`, opened PR #22, verified it locally and in GitHub, then squash-merged it as `cf209aa`.
+Verification: Ran `actionlint .github/workflows/release-dry-run.yml`, `go run ./cmd/template-go-api openapi | grep -Fq "openapi: 3.0.3"`, a local Docker build plus `--version` and `openapi` container smoke commands, PR #22 checks, and a manually dispatched `Release Dry Run` on the fix branch (`28252918412`) where `Container Image Dry Run` passed.
+Current state: Local `master` is clean at `cf209aa`. Release PR #21 was updated against current `master`; all checks now pass, including the fresh `Release Dry Run` run `28253261568` and its `Container Image Dry Run` job. The temporary fix worktree/branch was removed.
