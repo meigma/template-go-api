@@ -250,7 +250,7 @@ jobs:
           set -euo pipefail
 
           docker run --rm --platform "${{ matrix.platform }}" "$IMAGE_REF" --version
-          docker run --rm --platform "${{ matrix.platform }}" "$IMAGE_REF" --message "hello from container"
+          docker run --rm --platform "${{ matrix.platform }}" "$IMAGE_REF" openapi | grep -Fq "openapi: 3.0.3"
 
       - name: Export platform digest
         env:
@@ -376,7 +376,7 @@ jobs:
           set -euo pipefail
 
           docker run --rm "${{ steps.manifest.outputs.tag }}" --version
-          docker run --rm "${{ steps.manifest.outputs.tag }}" --message "hello from container"
+          docker run --rm "${{ steps.manifest.outputs.tag }}" openapi | grep -Fq "openapi: 3.0.3"
 
       - name: Attest container image
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
