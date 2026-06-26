@@ -25,3 +25,9 @@ Goal for the checkpoint: Inspect the two open Dependabot PRs, merge them sequent
 What was done: Inspected PR #1 (`chore(deps): bump golang from 5d2b868 to 5f68ec6`) and PR #2 (`chore(deps): bump actions/checkout from 6.0.3 to 7.0.0`), confirmed their required checks were pass/skipped as expected, then squash-merged each with `--match-head-commit`.
 What was learned: PR #1 merged as `cae691b`; post-merge CI, GitHub Pages, Release Please, and both CodeQL runs completed successfully. PR #2 merged as `9349873`; the same post-merge workflow set completed successfully. Local `master` was fast-forwarded after each merge and is clean at `9349873`.
 Current state: There are no open Dependabot PRs. Release Please opened follow-on PR #21 (`chore(master): release 1.0.0`).
+
+## 2026-06-26 09:56 — Release PR dry-run failure diagnosis
+Goal for the checkpoint: Determine why release PR #21 has a failing workflow.
+What was found: The main `ci` check passed. The blocking failure is `Container Image Dry Run` in the `Release Dry Run` workflow run `28251912429`, job `83705610805`.
+Root cause: The `Smoke test local image` step in `.github/workflows/release-dry-run.yml` runs `docker run --rm template-go-api:dry-run --message "hello from container"`, but the built API-server binary has no `--message` flag. The container successfully runs `--version` first, then exits with `unknown flag: --message`.
+Current state: PR #21 only changes `.release-please-manifest.json` and `CHANGELOG.md`; the failure is a stale release dry-run smoke-test command, not a release-please content issue.
