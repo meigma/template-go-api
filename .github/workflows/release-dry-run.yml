@@ -254,4 +254,4 @@ jobs:
           set -euo pipefail
 
           docker run --rm template-go-api:dry-run --version
-          docker run --rm template-go-api:dry-run --message "hello from container"
+          docker run --rm template-go-api:dry-run openapi | grep -Fq "openapi: 3.0.3"
