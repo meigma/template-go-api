@@ -178,5 +178,20 @@ Strategic fork = fleet uniformity (buildpacks) vs per-language best-fit (ko for 
 something for others) vs controlled cross-language (shared/parameterized Dockerfile).
 Next: surface the strategic decision to the developer. Still no changes made.
 
+## 2026-06-27 12:20 — CORRECTION: GoReleaser DID have buildpacks (now removed)
+Developer corrected an error in the 12:05 note. I wrote "No GoReleaser integration
+(it has native ko, not pack)" as if buildpacks were never supported — WRONG.
+Accurate: GoReleaser added a native `buildpacks` block in **0.179.0 (Sept 2021)**,
+then **deprecated + removed it in 2022** (issue goreleaser/goreleaser#2976, closed
+2022-03-17). Maintainer's removal rationale, verbatim: "The binary gets rebuild
+again during the buildpack build" + "No ARM support" — i.e. EXACTLY the two cons I
+flagged for buildpacks. caarlos0 noted the same rebuild concern applied to the then-
+proposed ko, but ko was kept/added anyway (native cross-compile, ARM, minimal image)
+→ ecosystem landed on ko-yes / buildpacks-no. Net effect on the assessment: unchanged
+in substance (today you'd run `pack` separately, NOT via GoReleaser), but the correct
+phrasing is "GoReleaser REMOVED its buildpacks pipe in 2022," and the removal reasons
+are corroborating evidence for the assessment, not new cons. Process lesson: I
+asserted a tooling-support claim from memory instead of verifying — don't.
+
 
 
