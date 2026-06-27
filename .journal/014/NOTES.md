@@ -132,4 +132,51 @@ use case). Two real design decisions: (A) compose/local UX, (B) integrate via
 goreleaser `kos:` (cleanest) vs standalone `ko` in release.yml. Still research-only;
 no changes made.
 
+## 2026-06-27 12:05 — Cloud Native Buildpacks assessment (research only)
+Developer's driver: ko is Go-only; they maintain OTHER non-Go templates and want
+ONE image strategy across the fleet. So buildpacks (CNB / `pack` / Paketo) evaluated
+mainly as a LANGUAGE-AGNOSTIC strategy, not just for this repo.
+
+Grounded facts (paketo.io Go howto + buildpacks.io multi-arch search):
+- Paketo Go: ldflags via `BP_GO_BUILD_LDFLAGS` (`-X main.version=...`), flags via
+  `BP_GO_BUILD_FLAGS` (e.g. `-trimpath`), entrypoints via `BP_GO_TARGETS`; config
+  through `project.toml` `[[io.buildpacks.build.env]]`. Builds with Paketo Tiny
+  Builder → tiny run image (distroless-like: no shell, nonroot cnb user). SBOM
+  native = CycloneDX (`sbom.cdx.json`, also SPDX/Syft), `pack build --sbom-output-dir`.
+- Multi-arch is the WEAK spot vs ko: CNB cannot cross-build app images (ARM-on-AMD)
+  natively — needs native-arch runners + `pack manifest` to assemble the index, OR
+  QEMU emulation (perf penalty). heroku/builder:24 ships multi-arch Go/Node/Java/etc.
+  This re-introduces the buildx-matrix complexity ko removed — and is arguably worse
+  than the CURRENT Dockerfile, which Go-natively cross-compiles via
+  `--platform=$BUILDPLATFORM` + GOOS/GOARCH (no QEMU). The Go buildpack compiles
+  INSIDE the target-arch image, so it can't cross-compile that way.
+- `pack rebase`: swap the run/OS base layer for CVE patches WITHOUT rebuilding the
+  app — a genuine FLEET supply-chain win. Reproducible builds supported.
+- No GoReleaser integration (it has native `ko`, not `pack`), so buildpacks would NOT
+  reuse the goreleaser `builds` block — invoke `pack` separately in release.yml.
+
+Fit/tradeoffs for THIS repo + fleet:
+- FOR (fleet): one Dockerfile-free, language-agnostic build for Go AND non-Go
+  templates; native SBOM; rebase for fleet patching; per-language config via BP_*/
+  project.toml. This is the ONE thing ko can't do and a Dockerfile only does by
+  hand-rolling N files.
+- AGAINST (this service): tiny run image is Ubuntu(jammy)-based, larger & less
+  minimal than ko/distroless-static "just the binary"; multi-arch friction (native
+  runners or QEMU + manifest); heaviest CI (pull a >1GB builder, slower detect+build);
+  LEAST transparent/auditable (build logic lives in the opaque third-party builder)
+  — the sharpest clash with this template's "every line pinned & auditable" posture;
+  no goreleaser reuse.
+
+Synthesis across all four options (this concludes the research arc):
+- moon docker layer: weakest fit (monorepo dep-install tool; default gen regresses).
+- ko: best IMAGE + least effort for THIS Go service; Go-only (no fleet reach).
+- buildpacks: best FLEET uniformity (Go + non-Go, SBOM, rebase); least minimal/
+  transparent, multi-arch friction, heaviest CI.
+- customized Dockerfile (status quo): full control + minimalism + native Go
+  cross-compile; language-agnostic but hand-maintained per template.
+Strategic fork = fleet uniformity (buildpacks) vs per-language best-fit (ko for Go +
+something for others) vs controlled cross-language (shared/parameterized Dockerfile).
+Next: surface the strategic decision to the developer. Still no changes made.
+
+
 
