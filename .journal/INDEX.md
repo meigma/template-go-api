@@ -15,4 +15,4 @@
 | 011 | 2026-06-24 | Finalize the repo | complete | Built the last three feature seams — API versioning (#16), rate limiting (#17), OTel tracing (#18) — and cleared housekeeping: ignored local tooling dirs (#19, #20), verified session 005 already complete, and documented why only sqlc is repo-pinned. |
 | 012 | 2026-06-26 | Basic finalization | in-progress | Track the final polish and closeout work needed before declaring the template ready. |
 | 013 | 2026-06-26 | New session — awaiting goal | in-progress | Session primed via `/session-new`; goal not yet stated, title and scope to be refined on the developer's first request. |
-| 014 | 2026-06-27 | New session — awaiting goal | in-progress | Session primed via `/session-new`; goal not yet stated, title and scope to be refined on the developer's first request. |
+| 014 | 2026-06-27 | Evaluate adopting moon's Docker integration vs. the hand-rolled Dockerfile | in-progress | Researching moon's `docker scaffold/setup/prune/file` layer to decide whether to replace the hand-rolled multi-stage Dockerfile; default generation regresses distroless/multi-arch/ldflags, so weighing adoption options. |
