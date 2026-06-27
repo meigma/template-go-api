@@ -78,3 +78,58 @@ Realistic adoption options to discuss with the developer (NOT yet decided):
    Dockerfile (keeps the minimal runtime + stamping; gains moon toolchain consistency).
 Next: present findings, then collaborate on which direction (design decision).
 
+## 2026-06-27 11:45 — ko assessment (research only, no changes)
+Developer asked for the same-style assessment of `ko` (ko.build) vs a customized
+Dockerfile. ko = purpose-built Go→OCI image builder, NO Dockerfile; native cross-
+compile (no QEMU), distroless base, multi-arch, auto SBOM, reproducible.
+
+Decisive FIT signals for this repo:
+- Pure Go, `CGO_ENABLED=0`, single static binary, and ALL runtime assets are
+  `go:embed`'d — migrations (`internal/adapter/postgres/migrations.go`), Cedar
+  policies (`internal/authz/authz.go` base.cedar, `internal/todo/authz/
+  contribution.go` policy.cedar). `--authz-policy-dir` is an OPTIONAL override
+  (default empty = embedded). So the image needs ONLY the binary — ko's exact
+  sweet spot; no `kodata` needed.
+- `.goreleaser.yaml` already declares the precise build settings ko reuses:
+  `CGO_ENABLED=0`, `-trimpath`, ldflags (`-s -w -buildid=` + version/commit/date),
+  `mod_timestamp`, goos darwin+linux, goarch amd64+arm64, plus binary SBOMs.
+- GoReleaser has native `kos:` integration that REUSES the `builds` block (ldflags/
+  flags/env) and uses ko as a LIBRARY (no separate ko binary to pin — verify). So
+  adoption ≈ add a `kos:` block; supports multi-arch + SPDX SBOM + labels/annotations.
+
+Grounded facts (ko.build docs + web): default base `cgr.dev/chainguard/static`
+(distroless, no shell/glibc, SLSA-L3, SBOM'd), pin by digest via `defaultBaseImage`/
+`baseImageOverrides`; multi-arch via `defaultPlatforms`/`KO_DEFAULTPLATFORMS`; SBOM
+SPDX default pushed to registry; cosign-friendly. Current Dockerfile base is
+`gcr.io/distroless/static-debian12:nonroot` (parallel).
+
+ko PRESERVES or IMPROVES every current-Dockerfile property: distroless nonroot,
+multi-arch (native cross-compile, faster than buildx+QEMU), ldflags stamping (via
+goreleaser builds), digest-pinned base, OCI labels, + adds auto per-image SBOM and
+reproducible images. It SIMPLIFIES release.yml (replaces the buildx matrix +
+push-by-digest + `imagetools create` manifest assembly + per-platform smoke loop
+with one ko/goreleaser build).
+
+Honest tradeoffs / frictions:
+1. Day-one compose: `compose.yaml` uses `build: context:.` (Dockerfile) for
+   migrate+api. ko is registry/`--local`-oriented, not a `docker build` backend, so
+   `docker compose up --build` needs rework — keep a thin Dockerfile for local, OR
+   `ko build --local` → reference `ko.local/...` in compose, OR a moon/make task.
+   (Session 006's day-one stack was a deliberate feature — design around this.)
+2. Static-only: no shell/apt/CGO. The goal here, but a boundary for forkers needing
+   system libs — document it.
+3. ko becomes a pinned tool IF used standalone; it publishes checksums + cosign sigs
+   (verifies cleanly, better than sqlc). Via goreleaser `kos` it's a library → likely
+   nothing extra to pin (verify).
+4. Minor: Dockerfile `test` stage drops (moon `root:test` + goreleaser before-hook
+   already run tests — redundant). OCI-label parity via `kos.labels`.
+5. Values tradeoff: a Dockerfile is explicit/auditable/pedagogical + language-agnostic;
+   ko is less code + Go-native but more "magic" / Go-only.
+
+Assessment: ko is a SUBSTANTIALLY better fit than moon's Docker layer, and arguably
+better than a customized Dockerfile on most axes for THIS service (the canonical ko
+use case). Two real design decisions: (A) compose/local UX, (B) integrate via
+goreleaser `kos:` (cleanest) vs standalone `ko` in release.yml. Still research-only;
+no changes made.
+
+
