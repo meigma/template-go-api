@@ -1,6 +1,6 @@
 # Day-one local stack: PostgreSQL + the API server, fully wired.
 #
-#   docker compose up --build
+#   mise run stack-up
 #   curl -sS -H 'X-API-Key: dev-user-key' localhost:8080/v1/todos   # the seeded todos (authz is on)
 #
 # Startup is an ordered DAG, because migrations are explicit (the server never
@@ -17,10 +17,10 @@ name: template-go-api
 # Prebaked connection string to the postgres service on the compose network.
 x-database-url: &database-url "postgres://app:app@postgres:5432/app?sslmode=disable"
 
-# Both the migrate one-shot and the api server run the same locally-built image.
+# Both the migrate one-shot and the api server run the same locally-built apko
+# image. Build + load it with `mise run image-local` (or `mise run stack-up`, which
+# builds the image and then runs `docker compose up`).
 x-app-image: &app-image
-  build:
-    context: .
   image: template-go-api:dev
 
 services:

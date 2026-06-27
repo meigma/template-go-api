@@ -59,9 +59,9 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    Most applications should keep both the binary and container paths. For other shapes:
 
    - Binary plus container: keep the default layout and update names.
-   - Binary only: keep GoReleaser and `ghd.toml`; remove the container release jobs and Dockerfile if the project will not ship images.
-   - Container only: keep the Dockerfile and container jobs; remove GoReleaser release assets and `ghd.toml` if users should not install a standalone binary.
-   - Library only: remove the CLI, Dockerfile, GoReleaser, `ghd.toml`, and publish workflow pieces. Keep Release Please only if the library should still get changelogs, tags, and draft GitHub releases.
+   - Binary only: keep GoReleaser and `ghd.toml`; remove the container release jobs and `melange.yaml`/`apko.yaml` if the project will not ship images.
+   - Container only: keep `melange.yaml`/`apko.yaml` and the container jobs; remove GoReleaser release assets and `ghd.toml` if users should not install a standalone binary.
+   - Library only: remove the CLI, `melange.yaml`/`apko.yaml`, GoReleaser, `ghd.toml`, and publish workflow pieces. Keep Release Please only if the library should still get changelogs, tags, and draft GitHub releases.
 
 3. For a binary-producing project, rename the binary directory:
 
@@ -77,7 +77,7 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    rg "template-go-api|TEMPLATE_GO_API|github.com/meigma/template-go-api"
    ```
 
-   Update Go imports, Moon metadata, README text, docs text, and CLI environment variable prefixes. For release-bearing projects, also update `.goreleaser.yaml`, `release-please-config.json`, `ghd.toml`, `Dockerfile`, and `.github/workflows/release*.yml` as applicable.
+   Update Go imports, Moon metadata, README text, docs text, and CLI environment variable prefixes. For release-bearing projects, also update `.goreleaser.yaml`, `release-please-config.json`, `ghd.toml`, `melange.yaml`, `apko.yaml`, and `.github/workflows/release*.yml` as applicable.
    Update `docs/mkdocs.yml` with the generated repository's GitHub Pages URL, usually `https://OWNER.github.io/REPO/`.
    Remember the `TEMPLATE_GO_API_` environment-variable prefix is set in `internal/cli/root.go` (`SetEnvPrefix`); rename it to match the new module.
 
@@ -132,7 +132,7 @@ The nominal generated-project path is an HTTP service with both a downloadable b
 
    - Update `.goreleaser.yaml`: `project_name`, build `id`, `main`, binary name, archive name template, and any linked package paths.
    - Update `ghd.toml`: `provenance.signer_workflow`, package name, description, asset patterns, and installed binary path.
-   - Update `Dockerfile`: binary path, labels, default `SOURCE`, base-image tags/digests, and runtime command if this is a service instead of a CLI.
+   - Update `apko.yaml` (entrypoint, OCI labels/annotations, packages) and `melange.yaml` (the `go/build` pipeline) — e.g. the binary path, image labels, or the runtime command if this is a service instead of a CLI.
    - Update `.github/workflows/release.yml`: `IMAGE_NAME`, binary validation names, container labels, summary commands, and verification examples.
    - Update `.github/workflows/release-dry-run.yml`: binary validation names, local container image name, and smoke-test commands.
    - Update `.github/workflows/security-scan.yml`: local container image name and scan category.
@@ -142,12 +142,12 @@ The nominal generated-project path is an HTTP service with both a downloadable b
 
    - Keep `.goreleaser.yaml`, `ghd.toml`, `Release Please`, `Binary Release Dry Run`, and the binary asset portions of `release.yml`.
    - Remove the `container-image-release` job, container verification summary text, and `Container Image Dry Run`.
-   - Remove `Dockerfile`, `.dockerignore`, and `.github/workflows/security-scan.yml` if no container build remains.
+   - Remove `melange.yaml`, `apko.yaml`, the `image-local`/`stack-up` mise tasks, and `.github/workflows/security-scan.yml` if no container build remains.
    - Remove `Container Image Dry Run` from required branch checks.
 
    For container-only projects:
 
-   - Keep `Release Please`, `Container Image Dry Run`, `container-image-release`, `Dockerfile`, and `.dockerignore`.
+   - Keep `Release Please`, `Container Image Dry Run`, `container-image-release`, `melange.yaml`, and `apko.yaml`.
    - Remove `.goreleaser.yaml`, `ghd.toml`, `binary-release-assets`, binary verification summary text, and `Binary Release Dry Run`.
    - Change `container-image-release` so it depends only on `resolve-release`.
    - Remove `Binary Release Dry Run` from required branch checks.
@@ -155,7 +155,7 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    For library-only projects:
 
    - Keep Release Please if version tags and changelogs are useful.
-   - Delete `.github/workflows/release.yml`, `.github/workflows/release-dry-run.yml`, `.github/workflows/security-scan.yml`, `.goreleaser.yaml`, `ghd.toml`, `Dockerfile`, and `.dockerignore` unless the library publishes some other artifact.
+   - Delete `.github/workflows/release.yml`, `.github/workflows/release-dry-run.yml`, `.github/workflows/security-scan.yml`, `.goreleaser.yaml`, `ghd.toml`, `melange.yaml`, and `apko.yaml` unless the library publishes some other artifact.
    - Remove release dry-run checks from `.github/repository-settings.toml`.
    - If the library should not create releases at all, delete `.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 

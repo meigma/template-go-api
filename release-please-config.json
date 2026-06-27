@@ -10,7 +10,8 @@
   "packages": {
     ".": {
       "package-name": "template-go-api",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["melange.yaml", "apko.yaml"]
     }
   },
   "changelog-sections": [

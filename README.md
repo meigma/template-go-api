@@ -47,7 +47,7 @@ way to bring up the whole stack — database, migrations, seed data, and the API
 is Docker Compose:
 
 ```sh
-docker compose up --build     # API on :8080, /metrics on :9090 (see "Local stack" below)
+mise run stack-up     # API on :8080, /metrics on :9090 (see "Local stack" below)
 ```
 
 To build the binary and run it against your own PostgreSQL instead, see
@@ -119,13 +119,13 @@ Elements) and the live spec at `/openapi.yaml` and `/openapi.json`.
 
 ## Local stack (Docker Compose)
 
-`docker compose up --build` brings up the **full** template against PostgreSQL —
+`mise run stack-up` brings up the **full** template against PostgreSQL —
 no local Go toolchain or database setup required. The stack also seeds the
 dev-only mock API keys (`hack/sql/0002_seed_api_keys.sql`), so the
 [Authorization](#authorization) tier is exercised end to end out of the box:
 
 ```sh
-docker compose up --build
+mise run stack-up
 
 # Authorization is on by default. With no key, a protected route returns 401:
 curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/v1/todos   # => 401
@@ -656,12 +656,17 @@ and OpenAPI drift guard.
 
 ## Container Image
 
-The included Dockerfile builds a static Linux binary and copies it into a
-non-root distroless runtime image. The default entrypoint runs the server:
+The image is built **without a Dockerfile**:
+[melange](https://github.com/chainguard-dev/melange) compiles the binary into a
+signed [Wolfi](https://github.com/wolfi-dev) apk (`melange.yaml`), and
+[apko](https://github.com/chainguard-dev/apko) assembles it into a minimal,
+multi-arch, non-root runtime image (`apko.yaml`) — the modern equivalent of the
+former distroless image (uid 65532, ca-certificates, tzdata, no shell). Each
+architecture builds natively (no QEMU). Build and run it locally with the bundled
+mise task (it uses melange's Docker runner, so Docker must be running):
 
 ```sh
-docker build --target test .
-docker build -t template-go-api:dev .
+mise run image-local              # build the host-arch image, load as template-go-api:dev
 docker run --rm -p 8080:8080 \
   -e TEMPLATE_GO_API_DATABASE_URL='postgres://<user>:<password>@host.docker.internal:5432/<db>' \
   template-go-api:dev
@@ -671,21 +676,13 @@ The server requires a database, so pass `TEMPLATE_GO_API_DATABASE_URL` pointing 
 a PostgreSQL reachable from inside the container — on Docker Desktop,
 `host.docker.internal` resolves to a database running on the host (see
 [Running with PostgreSQL](#running-with-postgresql)). For a fully wired
-API + PostgreSQL run, use the Compose stack instead.
+API + PostgreSQL run, use the Compose stack (`mise run stack-up`) instead.
 
-The Dockerfile pins the builder and runtime images by digest and verifies that
-the selected Go builder image matches `.go-version`. When bumping Go, update
-`.go-version` and the builder `FROM` tag/digest together.
-
-Release builds can pass the same binary metadata injected by GoReleaser:
-
-```sh
-docker build \
-  --build-arg VERSION="$(git describe --tags --always --dirty)" \
-  --build-arg COMMIT="$(git rev-parse HEAD)" \
-  --build-arg DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -t template-go-api:dev .
-```
+The Wolfi base intentionally floats to the latest packages (fresh CA bundle and
+timezones, low CVE surface); the exact resolved versions are recorded in the
+per-build SBOM and provenance attestation rather than pinned. `version`, `commit`,
+and `date` are stamped into the binary via melange `--vars-file` — the release
+workflow supplies the real values, and `mise run image-local` uses `dev`.
 
 ## CI and Security
 

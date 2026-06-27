@@ -43,7 +43,7 @@ moon run root:build
 moon run root:test
 moon run docs:build              # build the docs site (renders the OpenAPI spec)
 
-docker compose up --build        # run the full API + PostgreSQL stack (Ctrl-C to stop)
+mise run stack-up                # run the full API + PostgreSQL stack (Ctrl-C to stop)
 curl -sS localhost:8080/healthz  # smoke-test the running server (in another shell)
 ```
 
