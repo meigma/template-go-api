@@ -155,3 +155,35 @@ research agent. Findings:
   is the closest cross-language carrier of ko's *philosophy*. (Cute escape hatch
   for ko literally everywhere: a tiny Go static-server that `go:embed`s the SPA
   `dist/`, ko-built — couples the frontend image to a Go binary.)
+
+## 2026-06-27 14:05 — Migration plan designed (workflow) + APPROVED; starting impl
+Ran an exhaustive ultracode plan workflow (9 read-only agents: 3 Explore → 4 Plan
+designs → 2 adversarial critiques). Goal confirmed by developer: **Proto→mise,
+moon→system tooling, Dockerfile→melange/apko, GoReleaser stays, preserve/improve
+supply chain.** Plan written to the harness plan file
+`~/.claude/plans/understood-ok-with-all-curious-tide.md` and **approved** (plan
+mode). Four decisions (all "recommended"): (1) local stack = single apko pipeline
+behind `mise run stack-up` (melange `--runner docker` for macOS), Dockerfile fully
+deleted; (2) add **keyless cosign** image signature (GitHub OIDC) on top of kept
+attestations; (3) commit **`apko.lock.json`** to pin the Wolfi package set incl. Go
+patch; (4) **SLSA L3 deferred** (stays L2; reusable-workflow isolation is a separate
+follow-up).
+
+Shipping as **2 squash PRs**: PR1 = Proto→mise + moon system tooling (provable via
+`moon ci`); PR2 = Dockerfile→melange/apko (+ cosign + apko.lock + SBOM/provenance
+parity). Adversarial-review BLOCKERS folded into the plan: keep `.go-version` until
+both `setup-go` repoint to `go.mod` (release.yml:98 + release-dry-run.yml:36 use it —
+do in PR2); per-arch **distinct** melange key filenames (single shared key clobbers
+on `merge-multiple` → one arch fails verification); `melange --runner docker` (melange
+is Linux-only, maintainer on darwin); `syft` image SBOM + `attest-sbom` (apko default
+SBOM is apk-level, not Go-module-level — silent regression otherwise);
+`actions/attest-build-provenance` (dropping buildx removes `provenance: mode=max` →
+zero provenance otherwise); commit `mise.lock` + enforce fail-closed **in the same PR**
+that deletes `sqlc-verify`; add `mise.toml`/`mise.lock` to `goSources` (moon doesn't
+hash system-binary versions → stale cache on Go bump). Full design dossier (explore +
+4 designs + 2 critiques) saved under session scratchpad `wf_*.md`.
+
+Env note: local tools — moon 2.3.5, proto 0.58.1, go 1.26.4, docker 29.4.0 present;
+`go.mod` pins `go 1.26.4` (so setup-go → go.mod is clean). **mise was NOT installed;
+developer installed it via brew.** Next: PR1 worktree off master, author config,
+`mise lock` (4 platforms incl linux-arm64), verify `moon ci` green + fail-closed lock.
