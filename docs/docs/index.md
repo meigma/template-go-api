@@ -21,7 +21,7 @@ the API together. The Compose stack also seeds dev-only mock API keys, because
 the todo routes are protected by the authorization tier (on by default):
 
 ```sh
-docker compose up --build
+mise run stack-up
 
 # Authorization is on: without a key, a protected route returns 401.
 curl -sS -o /dev/null -w '%{http_code}\n' localhost:8080/v1/todos   # => 401

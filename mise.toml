@@ -49,3 +49,30 @@ GOTOOLCHAIN = "local"
 # pin, and extends integrity enforcement to every tool.
 lockfile = true
 locked = true
+
+# Local container image for the day-one stack. CI builds the release image via the
+# melange/apko jobs in .github/workflows/release.yml; these tasks are the local
+# equivalent. melange needs Linux, so `--runner docker` makes `image-local` work on
+# macOS too (Docker Desktop runs the Linux build container).
+[tasks.image-local]
+description = "Build the apko image for the host arch and load it into Docker as template-go-api:dev"
+run = '''
+set -euo pipefail
+arch="$(go env GOARCH)"
+rm -rf packages image.tar
+melange keygen melange.rsa
+printf 'version: "dev"\ncommit: "%s"\ndate: "%s"\n' \
+  "$(git rev-parse --short HEAD 2>/dev/null || echo none)" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .melange-vars.local.yaml
+melange build melange.yaml --arch "$arch" --signing-key melange.rsa --runner docker \
+  --source-dir . --vars-file .melange-vars.local.yaml
+apko build apko.yaml template-go-api:dev image.tar --arch "$arch" --keyring-append ./melange.rsa.pub
+docker load < image.tar
+docker tag "template-go-api:dev-$arch" template-go-api:dev
+echo "loaded template-go-api:dev (host arch $arch)"
+'''
+
+[tasks.stack-up]
+description = "Build the local apko image, then bring up the Postgres + API day-one stack"
+depends = ["image-local"]
+run = "docker compose up"
