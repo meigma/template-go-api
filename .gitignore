@@ -20,6 +20,11 @@
 .env.*
 .envrc
 
+# mise local overrides (per-developer tool/env overrides; never committed).
+# mise.toml and mise.lock ARE committed.
+mise.local.toml
+.mise.local.toml
+
 # Go
 bin/
 cover.out

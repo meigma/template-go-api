@@ -30,6 +30,7 @@ Contributors should:
 ## Local Setup
 
 ```sh
+mise install         # provision the pinned toolchain (Go, Moon, the dev CLIs)
 moon run root:check
 ```
 
