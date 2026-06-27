@@ -16,3 +16,4 @@
 | 012 | 2026-06-26 | Basic finalization | in-progress | Track the final polish and closeout work needed before declaring the template ready. |
 | 013 | 2026-06-26 | New session — awaiting goal | in-progress | Session primed via `/session-new`; goal not yet stated, title and scope to be refined on the developer's first request. |
 | 014 | 2026-06-27 | Research container-image build strategy — moon docker vs ko vs buildpacks vs the hand-rolled Dockerfile | complete | Assessed three alternatives to the hand-rolled Dockerfile (moon = weakest fit; ko = best for this Go service but Go-only; buildpacks = only cross-language option but heavier/less-minimal); no change made, strategic decision deferred. |
+| 015 | 2026-06-27 | New session — awaiting goal | in-progress | Session primed via `/session-new`; goal not yet stated, title and scope to be refined on the developer's first request. |
