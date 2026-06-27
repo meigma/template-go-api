@@ -187,3 +187,35 @@ Env note: local tools — moon 2.3.5, proto 0.58.1, go 1.26.4, docker 29.4.0 pre
 `go.mod` pins `go 1.26.4` (so setup-go → go.mod is clean). **mise was NOT installed;
 developer installed it via brew.** Next: PR1 worktree off master, author config,
 `mise lock` (4 platforms incl linux-arm64), verify `moon ci` green + fail-closed lock.
+
+## 2026-06-27 15:36 — PR1 shipped (open + all CI green)
+**PR #24** `build(tooling): replace proto with mise and run moon on system binaries`
+— branch `build/proto-to-mise` (commit `52b0143`), off master. All checks GREEN:
+`ci` (moon, 1m3s), GitHub Pages (docs via mise uv/python), CodeQL go+actions,
+Kusari Inspector; release/container dry-run jobs correctly skip on a non-release
+branch. Awaiting developer review/merge.
+
+What landed: `mise.toml` (go/python/uv + aqua CLIs golangci-lint/sqlc/mockery/goose
++ moon/melange/apko/cosign; `[settings] lockfile+locked`; `GOTOOLCHAIN=local`) +
+committed `mise.lock` (11 tools x 4 platforms). `moon.yml`: `proto run X --` -> bare
+commands, `toolchains.default: system`, **`sqlc-verify` task + deps removed**,
+fileGroups (incl `goSources`) track `mise.toml`/`mise.lock`. `.moon/toolchains.yml`
++ `docs/moon.yml` -> system (no managed toolchains). `ci.yml`/`docs-pages.yml`:
+`moonrepo/setup-toolchain` -> `jdx/mise-action@v4.2.0` (SHA-pinned), `uv cache dir`,
+cache keys -> `mise.lock`. Deleted `.prototools`, `.moon/proto/*`, `.nvmrc`. Prose
+(README/CONTRIBUTING/DELETE_ME) updated. Kept `.go-version` + Dockerfile (PR2 moves
+them). Verified locally: `moon run root:check` green (10 tasks via mise tooling) +
+fail-closed lock proven by a checksum-tamper (`Checksum mismatch`).
+
+GOTCHAs: (1) mise `lockfile=true` alone does NOT create `mise.lock` on install —
+must `touch mise.lock` first, then `mise lock --platform <all>`. (2) `mise lock`
+RESOLVES but does not PERSIST the moon `macos-x64` entry (mise write quirk) —
+hand-added from moon's official `.sha256`; re-running `mise lock` may drop it. (3)
+enforcement key is `settings.locked` (fail-closed); `settings.lockfile` enables the
+file. (4) aqua backend verifies cosign/SLSA/GitHub-attestations by default — a
+strict upgrade over Proto `checksum-url` (confirmed at install time).
+
+Next: **PR2** = Dockerfile -> melange/apko (+ keyless cosign, apko.lock.json, syft
+SBOM + attest-build-provenance, native-runner multi-arch, compose via `mise run
+stack-up`). Base PR2 off master AFTER PR1 merges (consumes PR1's mise tools) or
+stack on `build/proto-to-mise`. melange/apko/cosign already pinned in mise.toml.
