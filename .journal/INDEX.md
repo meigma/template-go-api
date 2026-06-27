@@ -14,3 +14,4 @@
 | 010 | 2026-06-24 | Address independent security review findings | complete | Remediated all three Codex findings as separate squash PRs — API keys hashed at rest (#13), `GET /todos` keyset-paginated (#14), sqlc binary integrity-pinned (#15). |
 | 011 | 2026-06-24 | Finalize the repo | complete | Built the last three feature seams — API versioning (#16), rate limiting (#17), OTel tracing (#18) — and cleared housekeeping: ignored local tooling dirs (#19, #20), verified session 005 already complete, and documented why only sqlc is repo-pinned. |
 | 012 | 2026-06-26 | Basic finalization | in-progress | Track the final polish and closeout work needed before declaring the template ready. |
+| 013 | 2026-06-26 | New session — awaiting goal | in-progress | Session primed via `/session-new`; goal not yet stated, title and scope to be refined on the developer's first request. |
