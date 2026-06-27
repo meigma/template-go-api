@@ -219,3 +219,51 @@ Next: **PR2** = Dockerfile -> melange/apko (+ keyless cosign, apko.lock.json, sy
 SBOM + attest-build-provenance, native-runner multi-arch, compose via `mise run
 stack-up`). Base PR2 off master AFTER PR1 merges (consumes PR1's mise tools) or
 stack on `build/proto-to-mise`. melange/apko/cosign already pinned in mise.toml.
+
+## 2026-06-27 16:16 — PR1 merged; PR2 shipped (open + all CI green)
+PR1 (#24) **merged** to master (`7aac1e1`); worktree/branch cleaned up (remote
+auto-deleted). PR2 opened off the updated master.
+
+**PR2 #25** `build(release): build the container image with melange + apko` —
+branch `build/melange-apko` (commit `2617376`). Replaces the Dockerfile with
+melange (signed Wolfi apk) + apko (minimal multi-arch nonroot image) + keyless
+cosign + attest-build-provenance + syft image SBOM. GoReleaser binary path
+unchanged (setup-go → go.mod). Deleted Dockerfile/.dockerignore/.go-version. New
+mise tasks `image-local`/`stack-up`; compose runs the prebuilt `template-go-api:dev`.
+
+**DECISION CHANGE (mid-flight):** apko.lock.json (plan decision #3) was DROPPED —
+`apko lock` insists on resolving the per-build `@local` app apk for all arches, and
+a committed lock would pin a stale app checksum that breaks the next release. The
+developer chose (AskUserQuestion) to **float the Wolfi base + Go** and rely on the
+per-build SBOM + provenance attestation for auditability (idiomatic Wolfi;
+fresh CAs/tzdata/low-CVE). So no version pins, no lockfile.
+
+VALIDATION (all green):
+- Local: `melange build` (arm64, --runner docker) → `apko build` → docker run smoke
+  (`--version` shows --vars-file stamping; `openapi: 3.0.3`), uid 65532, ~24 MB.
+- Local day-one stack: `mise run image-local` + `docker compose up` → postgres/
+  migrate/seed/api healthy; `GET /v1/todos` w/ dev-user-key returns 3 seeded todos,
+  401 without. `moon run root:check` green.
+- CI on PR #25: `ci` (moon) pass, CodeQL go+actions pass, GitHub Pages pass, Kusari
+  pass. Dispatched `release-dry-run` (build/melange-apko ref) → **success**: Melange
+  Build Dry Run (amd64 + arm64 native, no QEMU) + Container Image Dry Run (apko
+  assemble + smoke). Dispatched `security-scan` → **success** (Trivy clean on the
+  apko image). NOT yet exercised: the tag-triggered publish→cosign→attest path
+  (needs a real/throwaway prerelease tag against a scratch GHCR namespace).
+
+GOTCHAs discovered building PR2:
+- Wolfi has NO `nonroot` PACKAGE — create the user via apko `accounts` (users/groups
+  + run-as 65532), mirroring Chainguard images.
+- mise config discovery walks UP from the nested `.wt/<branch>` worktree and also
+  loads the MAIN checkout's mise.toml (now present on master) — must `mise trust`
+  BOTH the worktree and the parent config.
+- apko writes a default SBOM (`sbom-*.spdx.json`) to CWD if `--sbom-path` isn't set
+  — gitignore `*.spdx.json` (it leaked into staging once).
+- apko single-arch `build` loads as `<tag>-<arch>` (e.g. `:dev-arm64`) — retag to
+  `:dev` for compose.
+- melange/apko CI jobs are gated to release-please branches, so a normal PR doesn't
+  exercise them — dispatch `release-dry-run`/`security-scan` on the branch to test.
+
+Both PRs (mise+moon, melange+apko) now CI-green. PR1 merged; PR2 awaiting developer
+review/merge. Migration COMPLETE pending PR2 merge + a real release-tag rehearsal.
+SLSA L3 (reusable-workflow isolation) remains the deferred follow-up.
