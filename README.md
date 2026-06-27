@@ -17,21 +17,24 @@ your own resource and keep the persistence wiring.
 
 ## Prerequisites
 
-- Go 1.26.4
-- Moon 2.x
-- Python 3.14.3 and uv 0.11.0 (only for the MkDocs documentation project)
+- [mise](https://mise.jdx.dev) — provisions every pinned tool from `mise.toml` +
+  `mise.lock`: Go, Moon, Python + uv (for the MkDocs docs project), the
+  `golangci-lint`/`sqlc`/`mockery`/`goose` CLIs, and `melange`/`apko`/`cosign` for
+  releases. Run `mise install` once; there is nothing else to install by hand.
 - Docker (to run a local PostgreSQL for the server — see [Persistence](#persistence)
   and [Local stack](#local-stack-docker-compose) — and for the container-backed
   integration tests)
 
-The `sqlc`, `goose`, and `mockery` CLIs are pinned in `.prototools` and run
-through Proto, so they are fetched on demand by Moon — there is nothing to install
-by hand. Each Proto plugin verifies its download: `goose`, `mockery`, and
-`golangci-lint` check the upstream checksum file (`checksum-url`), while `sqlc`
-(which publishes no checksum) is verified by the `sqlc-verify` task against a
-repo-pinned digest in `.moon/proto/sqlc.sha256` before it runs. Bumping the `sqlc`
-version in `.prototools` therefore also means refreshing those digests — the
-regeneration recipe is in that file's header.
+Tool versions live in `mise.toml`; `mise.lock` records a per-platform download URL
+and checksum for each (and, for the aqua-backed CLIs, cosign/SLSA/GitHub-attestation
+verification). `mise install` runs with `locked = true`, so it **fails closed** if a
+tool lacks a pre-resolved, checksummed entry for the current platform — replacing the
+former Proto `checksum-url` pins and the bespoke `.moon/proto/sqlc.sha256` digest
+(sqlc publishes no upstream checksum). Moon runs every task against these tools as
+`system` binaries on PATH and manages no toolchain itself. To bump a tool, edit its
+version in `mise.toml`, run
+`mise lock --platform linux-x64,linux-arm64,macos-x64,macos-arm64`, and commit
+`mise.toml` + `mise.lock`.
 
 > **New repository from this template?** Work through [DELETE_ME.md](DELETE_ME.md)
 > first — it covers renaming the module, binary, image, and env prefix, and
@@ -265,11 +268,11 @@ Moon wraps the same command for local dev (arguments after `--` pass through):
 moon run root:migrate -- up --database-url "$TEMPLATE_GO_API_DATABASE_URL"
 ```
 
-Scaffold a new migration file with the Proto-managed goose CLI, then edit its
+Scaffold a new migration file with the goose CLI (provided by mise), then edit its
 `-- +goose Up` / `-- +goose Down` sections:
 
 ```sh
-proto run goose -- -dir internal/adapter/postgres/migrations create add_something sql
+goose -dir internal/adapter/postgres/migrations create add_something sql
 ```
 
 Because sqlc reads the migrations directory as its schema, a schema change means
@@ -692,7 +695,7 @@ The docs workflow builds the MkDocs site on pull requests and deploys `docs/buil
 The scheduled security scan workflow builds the local container image weekly, scans it for high/critical fixed vulnerabilities, and uploads SARIF results to GitHub code scanning.
 Dependabot covers GitHub Actions, Docker base images, the root Go module, and the docs uv project.
 
-The build CLIs are pinned by version through [Proto](https://moonrepo.dev/proto) and their downloads are integrity-verified: golangci-lint, goose, and mockery verify against their publishers' checksum files (`checksum-url`), while sqlc — which publishes no checksums — is verified against a repository-committed per-platform digest (`.moon/proto/sqlc.sha256`) by the `sqlc-verify` task before it runs. Repo-pinning the other three was considered and deliberately left out: they already verify against upstream checksums, so committing per-platform digests would duplicate that control and add maintenance on every version bump.
+The build CLIs are pinned in `mise.toml` and locked in `mise.lock`, which records a per-platform download URL and checksum for every tool. `mise install` runs with `locked = true`, so it fails closed if any tool lacks a pre-resolved, checksummed entry for the current platform; the aqua-backed CLIs (`golangci-lint`, `sqlc`, `mockery`, `goose`, `moon`, `melange`, `apko`, `cosign`) additionally verify cosign signatures, SLSA provenance, and GitHub artifact attestations at install time. This supersedes the former Proto `checksum-url` pins and the repository-committed `.moon/proto/sqlc.sha256` digest that existed only because sqlc publishes no upstream checksum.
 
 Repository settings live in `.github/repository-settings.toml`.
 They default to immutable releases, private vulnerability reporting, signed commits, squash-only merges, GitHub Pages workflow publishing, and protected tags.
