@@ -123,3 +123,35 @@ genuine supply-chain upgrade and deletes `sqlc-verify`). Railpack is the weak li
 this hardened template; its only real upside is fleet cross-language uniformity
 (the same axis as buildpacks in session 014). GoReleaser stays. Decision on the
 image builder still owed to the developer; mise+moon could proceed independently.
+
+## 2026-06-27 13:05 — Fleet tangent: is there a `ko` for JS? + apko
+Developer asked (cross-fleet context — they maintain non-Go templates too)
+whether a `ko`-equivalent exists for JS (Vue/React/Node). Ran one grounded
+research agent. Findings:
+- **No JS-native ko-equivalent at maturity** — structural, not immaturity: ko
+  works because Go → one static binary (`base + binary = image`). JS has no
+  default single-artifact output. ko's real sibling is **Jib** (JVM); the "ko
+  family" is Go + Java, NO Node member. Google's `nodejs-container-image-builder`
+  was archived Sep 2025.
+- **Frontend SPA = easy case**: artifact is static files → image is `tiny static
+  server + dist/`. No one-shot tool, but only a ~10-line two-stage Dockerfile on
+  a shared base: **Chainguard nginx** (apko-built, SBOM) or **static-web-server**
+  (4 MB Rust binary).
+- **Backend Node**: only "minimal" via compile-to-binary — **Bun** `build
+  --compile` (stable, best; ~60–100 MB; glibc→`distroless/base`, not scratch;
+  cross-compiles incl. musl), **Deno** `compile` (mature; ~58 MB), **Node SEA**
+  (Stability 1.1, pre-stable — don't use yet), **vercel/pkg** (archived Jan 2024),
+  **nexe** (unmaintained). All still need a one-line COPY; none is daemonless
+  one-shot like ko.
+- **apko (Chainguard)** is the cross-fleet thread: explicitly ko-inspired,
+  daemonless, bitwise-reproducible, native SBOM, multi-arch — but at the
+  BASE-IMAGE layer (declarative YAML, no Dockerfile, no RUN/COPY-from-host). Can't
+  inject your app like ko injects a Go binary (would need melange to package the
+  app as an apk). Pairs with melange (source→apk) over Wolfi.
+- **Fleet takeaway** (reinforces the prior turn): don't chase "ko for every
+  language." Anchor consistency at a shared **apko/Chainguard hardened base-image
+  factory** + a thin per-language "get the artifact in" step (ko injects for Go;
+  COPY onto a shared static-server base for SPAs; Bun-compile+COPY for Node). apko
+  is the closest cross-language carrier of ko's *philosophy*. (Cute escape hatch
+  for ko literally everywhere: a tiny Go static-server that `go:embed`s the SPA
+  `dist/`, ko-built — couples the frontend image to a Go binary.)
