@@ -155,7 +155,7 @@ The nominal generated-project path is an HTTP service with both a downloadable b
    For library-only projects:
 
    - Keep Release Please if version tags and changelogs are useful.
-   - Delete `.github/workflows/release.yml`, `.github/workflows/release-dry-run.yml`, `.github/workflows/security-scan.yml`, `.goreleaser.yaml`, `ghd.toml`, `melange.yaml`, and `apko.yaml` unless the library publishes some other artifact.
+   - Delete `.github/workflows/release.yml`, `.github/workflows/release-dry-run.yml`, `.github/workflows/attest.yml`, `.github/workflows/security-scan.yml`, `.goreleaser.yaml`, `ghd.toml`, `melange.yaml`, and `apko.yaml` unless the library publishes some other artifact.
    - Remove release dry-run checks from `.github/repository-settings.toml`.
    - If the library should not create releases at all, delete `.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 

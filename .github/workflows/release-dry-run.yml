@@ -62,7 +62,7 @@ jobs:
           version="0.0.0-dryrun.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
           binary_name="template-go-api"
           asset_prefix="${binary_name}_"
-          expected_signer="${GITHUB_REPOSITORY}/.github/workflows/release.yml"
+          expected_signer="${GITHUB_REPOSITORY}/.github/workflows/attest.yml"
           actual_signer="$(awk -F'"' '/signer_workflow/ { print $2; exit }' ghd.toml)"
 
           if [ "$actual_signer" != "$expected_signer" ]; then
