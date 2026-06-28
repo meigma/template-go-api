@@ -312,6 +312,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          # apko --sbom-path moves the generated SBOMs into this directory, which
+          # must already exist (apko does not create it).
+          mkdir -p sbom
+
           apko publish apko.yaml "$IMAGE_TAG" \
             --arch amd64,arm64 \
             --keyring-append ./melange-amd64.rsa.pub \
