@@ -267,3 +267,49 @@ GOTCHAs discovered building PR2:
 Both PRs (mise+moon, melange+apko) now CI-green. PR1 merged; PR2 awaiting developer
 review/merge. Migration COMPLETE pending PR2 merge + a real release-tag rehearsal.
 SLSA L3 (reusable-workflow isolation) remains the deferred follow-up.
+
+## 2026-06-27 17:02 — PR2 merged; SLSA L3 follow-up (#26) shipped
+PR2 (#25) **merged** to master (`4098277`). (Note: SSH key dropped mid-session
+right after the merge — `gh pr merge` went through the API fine, but `git fetch`/
+push over SSH failed; resolved when the developer re-added the key. Then ff'd local
+master, removed the build/melange-apko worktree, and this journal push resumed.)
+
+**SLSA L3 research + decision (3 AskUserQuestion turns):** Researched the L3 path.
+Key facts: L3 over L2 = run isolation + **signing-key inaccessible to build steps**
+(NOT hermetic builds). In-job `attest*` = L2. Two paths: (A) **slsa-github-generator**
+reusable workflows → community/`slsa-verifier`-verifiable L3, BUT it moves provenance
+OFF GitHub's attestation API (Sigstore + release-asset/OCI; you'd use `slsa-verifier`,
+not `gh attestation verify`); (B) move `attest*` into a **reusable workflow** →
+GitHub-claimed L3, **keeps GitHub's attestation API + `gh attestation verify`**, but
+not `slsa-verifier`-recognized. Developer asked specifically about losing GitHub's
+attestation API → **chose Option B** to keep it. (Also: the slsa-github-generator is
+mid-redesign to sit ON TOP of GitHub artifact attestations — convergence — another
+reason B.)
+
+**PR #26** `ci(release): generate provenance in an isolated reusable workflow (SLSA L3)`
+— branch `ci/slsa-l3-provenance` (commit `2df98a4`), off master. Adds
+`.github/workflows/attest.yml` (reusable, `workflow_call`): `actions/attest`
+(binary checksums via uploaded artifact) + `attest-build-provenance` (image by
+name+digest). `release.yml`: build jobs drop in-job provenance attest; new
+`attest-binaries`/`attest-image` jobs call `attest.yml`. **Kept in the build job:**
+keyless cosign sign + syft SBOM attestation (separate controls, not the SLSA
+provenance). RIPPLE FIXED: provenance signer moved release.yml→attest.yml, so
+updated `ghd.toml` signer_workflow, `stage_ghd_release_assets.py` expected_signer
+(+ its unittest), `release-dry-run.yml` expected_signer, and the summary's
+`gh attestation verify --signer-workflow` (cosign verify stays release.yml — cosign
+signer unchanged). README "Release Layer" prose fixed (also corrected a stale
+"BuildKit provenance" line left from PR2). VALIDATION: stage_ghd test green; 3
+workflow YAMLs valid; PR #26 CI green (ci/CodeQL/Pages/Kusari); dispatched
+`release-dry-run` → **success** (build path + the attest.yml ghd-signer-consistency
+check). attest.yml's runtime only fires on a real release.yml tag — the throwaway
+prerelease-tag rehearsal now validates publish + cosign + L3 attest together.
+
+GOTCHA (L3): L3 = unforgeable provenance, NOT a trustworthy build — the build job
+still computes the hashes/digest it passes; the gate is signing-key isolation. And
+Option B's "L3" is GitHub's self-asserted claim (reusable-workflow isolation), not a
+`slsa-verifier`-recognized builder ID — the deliberate trade for keeping
+`gh attestation verify`.
+
+STATE: PR1+PR2 merged. **PR #26 (L3) open, green, awaiting developer review/merge.**
+Still owed before first real release: the throwaway-prerelease-tag rehearsal (now
+covers melange/apko publish + cosign + L3 attest in one go).
