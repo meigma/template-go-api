@@ -407,3 +407,17 @@ CHANGELOG.md carries 1.0.1-1.0.4 entries (history of the shakeout); GHCR may hol
 superseded v1.0.2/v1.0.3 image tags (the org-scoped packages API needs
 `/orgs/meigma/packages/...`; not deleted — referrer-aware cleanup left to the dev).
 Migration COMPLETE; release pipeline proven on a real tag at v1.0.4.
+
+## 2026-06-28 00:20 — Close
+Session 015 closed. No PRs to land at close — all work merged DURING the session:
+- #24 `7aac1e1` Proto→mise + moon system tooling.
+- #25 `4098277` Dockerfile→melange/apko (+ keyless cosign, SBOM/provenance attest).
+- #26 `8d5007d` provenance in an isolated reusable workflow (SLSA L3).
+- Release fixes #29/#31/#33 + release-please PRs #27/#28/#30/#32/#34 → **v1.0.4**
+  released (draft) and cryptographically verified.
+All implementation worktrees removed; `master` fast-forwarded; no open PRs.
+Hand-off: **v1.0.4 GitHub release is a DRAFT awaiting a human publish** (image is
+already live on GHCR). Residue the maintainer may tidy: tags v1.0.1–v1.0.3 +
+their CHANGELOG entries, superseded GHCR v1.0.2/v1.0.3 image tags. SUMMARY.md
+written; INDEX row → complete; TECH_NOTES updated (mise/melange/apko/L3 now the
+source of truth; Proto/Dockerfile/sqlc.sha256 bullets marked superseded).
