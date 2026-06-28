@@ -706,10 +706,11 @@ The release path is:
 
 - Release Please opens and maintains the release PR.
 - Release Please creates a draft GitHub release and tag after merge.
-- Release Dry Run rehearses the GoReleaser binary path and native-runner Docker container build path on pull requests.
+- Release Dry Run rehearses the GoReleaser binary path and the native-runner melange/apko container build path on pull requests.
 - GoReleaser builds binaries, checksums, and SBOMs without publishing directly.
-- The release workflow uploads assets to the draft release and creates a GitHub-hosted attestation for `checksums.txt`.
-- The release workflow builds amd64 and arm64 container images on native GitHub-hosted runners, publishes `ghcr.io/meigma/template-go-api:vX.Y.Z` as a multi-platform manifest, attaches BuildKit provenance and SBOM metadata, and creates a GitHub-native attestation for the manifest digest.
+- The release workflow uploads assets to the draft release; a separate, isolated reusable workflow (`attest.yml`) generates the GitHub-hosted provenance attestation for the binary checksums.
+- The release workflow builds amd64 and arm64 apks with melange on native GitHub-hosted runners, assembles and publishes `ghcr.io/meigma/template-go-api:vX.Y.Z` as a multi-platform manifest with apko, signs it with keyless cosign, and attaches a syft SBOM attestation; the isolated `attest.yml` workflow then creates the GitHub-native provenance attestation for the manifest digest.
+- Generating both provenance attestations in the isolated `attest.yml` reusable workflow (not in the build job) keeps the signing identity unreachable by build steps — the SLSA Build L3 isolation requirement — while staying on GitHub's attestation API (verify with `gh attestation verify --signer-workflow …/attest.yml`).
 - A human inspects the draft release before publication.
 
 The root `ghd.toml` matches the default GoReleaser output so generated projects can be installed with `ghd` once the release workflow runs.

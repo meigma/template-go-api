@@ -126,7 +126,7 @@ def run_script(root: Path) -> tuple[int, str, str]:
 @contextlib.contextmanager
 def fixture(
     *,
-    signer: str = "meigma/template-go-api/.github/workflows/release.yml",
+    signer: str = "meigma/template-go-api/.github/workflows/attest.yml",
     missing_checksum: str | None = None,
     checksum_override: tuple[str, str] | None = None,
     omit_artifact: tuple[str, str, str] | None = None,
