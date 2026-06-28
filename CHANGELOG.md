@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/meigma/template-go-api/compare/v1.0.1...v1.0.2) (2026-06-28)
+
+
+### Bug Fixes
+
+* **release:** grant the binary attestation caller the packages scope its reusable workflow needs ([#29](https://github.com/meigma/template-go-api/issues/29)) ([a8e1fc5](https://github.com/meigma/template-go-api/commit/a8e1fc5ec7f6ca0115254700dde2d0d1e22758c8))
+
 ## [1.0.1](https://github.com/meigma/template-go-api/compare/v1.0.0...v1.0.1) (2026-06-28)
 
 
