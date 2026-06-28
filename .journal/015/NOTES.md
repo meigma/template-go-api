@@ -324,3 +324,42 @@ Tooling migration + L3 are COMPLETE on master. ONLY remaining item: the
 throwaway-prerelease-tag rehearsal (validates melange/apko publish + cosign + the
 attest.yml L3 path together) before the first real release — not yet run; developer
 asked to pause. Session left clean (working tree clean; local master == origin).
+
+## 2026-06-27 17:20 — Forced 1.0.1 release → release.yml STARTUP_FAILURE (bug caught)
+Developer asked to force a release + observe + log failures. Flow worked up to the
+release run: forced via PR #27 (empty commit, squash-merged with `Release-As: 1.0.1`)
+→ release-please opened PR #28 (`chore(master): release 1.0.1`, bumped manifest +
+CHANGELOG + **apko.yaml/melange.yaml via extra-files** — confirmed working) → PR #28
+CI all green INCLUDING the full melange/apko dry-run on both arches → merged →
+release-please cut tag **v1.0.1** + draft release.
+
+**FAILURE: the tag-triggered `release.yml` run (28306107970) = `startup_failure`
+(0 jobs, 0s).** GitHub: "this run likely failed because of a workflow file issue."
+ROOT CAUSE (high confidence, from the config): the reusable workflow
+`.github/workflows/attest.yml`'s `attest` job declares `permissions: { id-token,
+attestations, contents, packages: write }`, but the caller job **`attest-binaries`**
+(in release.yml) grants only `{ id-token, attestations, contents }` — no `packages`.
+A reusable workflow may not request MORE permissions than its caller grants, so
+GitHub rejects the entire workflow at startup. (`attest-image` DOES grant
+`packages`, so only the binary caller is the offender — but one bad call fails the
+whole run.) This path was NEVER exercised before: the dry-run doesn't call
+attest.yml, and a normal PR doesn't run release.yml — only a real tag does. The
+rehearsal did its job: caught the bug before a (silently wrong) release.
+
+HALF-STATE (clean — nothing published): tag `v1.0.1` exists; draft release `v1.0.1`
+exists with **0 assets**; **no GHCR image** published; **no cosign/attestations**
+(release.yml never ran a job). So nothing to un-publish from a registry/Rekor.
+
+FIX (two options; NOT applied — paused per instruction):
+- Cleanest: drop attest.yml's job-level `permissions:` block (and the top-level
+  `permissions: {}`) so each caller's `uses`-job permissions define the token —
+  attest-binaries grants {id-token,attestations,contents}, attest-image grants
+  {+packages}; each call gets exactly its grant, no over-request. (Verify a
+  reusable job with no permissions block inherits the caller grant.)
+- Simplest/safe: add `packages: write` to the `attest-binaries` caller job so both
+  callers match the shared reusable job's declared perms (harmless over-grant).
+RECOVERY before re-release: delete tag `v1.0.1` + the draft release, land the fix on
+master (PR), then re-force (release-please re-cuts v1.0.1, or bump to 1.0.2).
+
+Paused. PR1/PR2/PR3(L3) remain merged + good; only the forced-release rehearsal
+surfaced this reusable-workflow permissions bug to fix before the first real release.
