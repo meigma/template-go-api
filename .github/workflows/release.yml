@@ -163,6 +163,12 @@ jobs:
       id-token: write
       attestations: write
       contents: read
+      # attest.yml is shared with attest-image, whose attest job declares
+      # packages: write for the image attestation's push-to-registry. A reusable
+      # workflow cannot request more permissions than its caller grants, so this
+      # caller must also grant packages even though the binary attestation never
+      # pushes to a registry (unused here, but required to satisfy the shared job).
+      packages: write
     uses: ./.github/workflows/attest.yml
     with:
       checksums-artifact: release-checksums
