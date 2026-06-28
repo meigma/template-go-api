@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/meigma/template-go-api/compare/v1.0.3...v1.0.4) (2026-06-28)
+
+
+### Bug Fixes
+
+* **release:** log in to GHCR in the reusable attest workflow before pushing image provenance ([#33](https://github.com/meigma/template-go-api/issues/33)) ([dcc4a6c](https://github.com/meigma/template-go-api/commit/dcc4a6cd313b868ade08be345189d414bca78f4d))
+
 ## [1.0.3](https://github.com/meigma/template-go-api/compare/v1.0.2...v1.0.3) (2026-06-28)
 
 
