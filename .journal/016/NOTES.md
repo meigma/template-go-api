@@ -70,3 +70,13 @@ No code/config changed (docs only). Deliberately NOT added to `.journal/SKILLS.m
 (task-specific, not always-required). CI expected to be a near no-op (moon affected-
 gating: a `.agents/**`-only diff touches no Go inputs). Next: human review/merge of
 PR #35, then worktree cleanup (`wt remove docs/tooling-skills`).
+
+## 2026-06-27 20:24 — Close
+PR #35 squash-merged (`e61e926`); `master` fast-forwarded `dff6533`→`e61e926`;
+worktree `docs/tooling-skills` + branch removed (`wt remove`: tree matches master,
+clean). The three skills under `.agents/skills/{mise,melange,apko}` are live and
+now discoverable as loadable skills. SUMMARY.md written; INDEX row → complete;
+TECH_NOTES pointer added (skills exist + the three mise.lock integrity nuances).
+No code/config changed. Pre-existing session-015 threads (draft v1.0.4 release,
+residual tags, attest-sbom deprecation) and the stale 012/013 in-progress rows are
+untouched. Session 016 closed.
