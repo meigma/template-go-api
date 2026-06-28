@@ -363,3 +363,47 @@ master (PR), then re-force (release-please re-cuts v1.0.1, or bump to 1.0.2).
 
 Paused. PR1/PR2/PR3(L3) remain merged + good; only the forced-release rehearsal
 surfaced this reusable-workflow permissions bug to fix before the first real release.
+
+## 2026-06-27 17:59 — Fix/rerun loop: 3 release-pipeline bugs found+fixed; v1.0.4 RELEASED + verified
+Developer said "proceed with fix/rerun." The first real-tag release shook out THREE
+distinct bugs in the never-before-run release.yml path; each fixed via a
+`fix(release):` PR (auto-triggers the next release-please patch), re-run, repeat:
+1. **v1.0.1 startup_failure** — reusable `attest.yml` job declared `packages: write`
+   but the `attest-binaries` caller granted fewer scopes (reusable workflow can't
+   exceed caller). FIX PR #29 (`fix`): grant `packages: write` to attest-binaries.
+2. **v1.0.2 apko publish failure** — `apko publish --sbom-path ./sbom` can't move
+   SBOMs into a non-existent dir. FIX PR #31: `mkdir -p sbom` before publish.
+3. **v1.0.3 attest-image failure** — `attest-build-provenance --push-to-registry`
+   runs in attest.yml's OWN runner with no GHCR creds (`No credentials found for
+   registry ghcr.io`); the build job's docker login doesn't carry into the reusable
+   workflow. FIX PR #33: add `docker/login-action` (ghcr) on the image path in
+   attest.yml. (Note: v1.0.3 still published image + cosign-signed + SBOM-attested;
+   only its provenance attestation was missing.)
+
+**v1.0.4 = FULL SUCCESS, end-to-end green + cryptographically verified:**
+- Binaries: 9 draft-release assets (4 bin + 4 syft SBOM + checksums); provenance
+  attested via the isolated attest.yml (L3).
+- Image `ghcr.io/meigma/template-go-api:v1.0.4` (linux/amd64+arm64): published,
+  **cosign keyless-signed** (verified, signer release.yml), **syft SBOM attested**,
+  **SLSA provenance attested** — verified: `gh attestation verify` →
+  predicateType `https://slsa.dev/provenance/v1`, signer SAN
+  `…/attest.yml@refs/tags/v1.0.4` (confirms L3 isolation + stays on GitHub's
+  attestation API). Multi-arch manifest = linux/amd64,linux/arm64.
+- v1.0.4 GitHub release left as a DRAFT by design (human publishes after inspection).
+
+KEY DURABLE LESSON (for the template / TECH_NOTES at close): a reusable attest
+workflow needs (a) every caller to grant ≥ the scopes the shared job declares
+(packages on the binary caller too), and (b) its OWN `docker/login-action` for any
+`push-to-registry` attestation — the calling job's registry login does not cross
+the reusable-workflow boundary. Also apko `--sbom-path <dir>` requires the dir to
+pre-exist. None of these are reachable by the dry-run (which never calls attest.yml
+and never pushes) — only a real tag exercises them, which is exactly why the forced
+release was worth doing.
+
+CLEANUP: deleted the broken draft releases v1.0.1/v1.0.2/v1.0.3 (kept v1.0.4 draft +
+the pre-existing v1.0.0 draft). RESIDUE the developer may want to tidy: tags
+v1.0.1-1.0.3 still exist (left consistent with CHANGELOG, likely protected);
+CHANGELOG.md carries 1.0.1-1.0.4 entries (history of the shakeout); GHCR may hold
+superseded v1.0.2/v1.0.3 image tags (the org-scoped packages API needs
+`/orgs/meigma/packages/...`; not deleted — referrer-aware cleanup left to the dev).
+Migration COMPLETE; release pipeline proven on a real tag at v1.0.4.
