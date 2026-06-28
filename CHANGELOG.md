@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/meigma/template-go-api/compare/v1.0.0...v1.0.1) (2026-06-28)
+
+
+### Chores
+
+* release 1.0.1 ([c071914](https://github.com/meigma/template-go-api/commit/c07191459342fa6ac7bf24bc7e2f029c4974c26d))
+
 ## 1.0.0 (2026-06-26)
 
 
