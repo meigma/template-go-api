@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/meigma/template-go-api/compare/v1.0.2...v1.0.3) (2026-06-28)
+
+
+### Bug Fixes
+
+* **release:** create the apko --sbom-path directory before publishing ([#31](https://github.com/meigma/template-go-api/issues/31)) ([4287c53](https://github.com/meigma/template-go-api/commit/4287c533b0fc07297dfb932d419ec8f3165d01be))
+
 ## [1.0.2](https://github.com/meigma/template-go-api/compare/v1.0.1...v1.0.2) (2026-06-28)
 
 
