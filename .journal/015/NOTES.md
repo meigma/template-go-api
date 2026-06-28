@@ -313,3 +313,14 @@ Option B's "L3" is GitHub's self-asserted claim (reusable-workflow isolation), n
 STATE: PR1+PR2 merged. **PR #26 (L3) open, green, awaiting developer review/merge.**
 Still owed before first real release: the throwaway-prerelease-tag rehearsal (now
 covers melange/apko publish + cosign + L3 attest in one go).
+
+## 2026-06-27 17:08 — PR #26 merged; all three PRs landed
+PR #26 (SLSA L3) **merged** to master (`8d5007d`); worktree/branch cleaned up,
+remote auto-deleted. All three session-015 PRs are now on master:
+- #24 `7aac1e1` — Proto → mise + moon system tooling.
+- #25 `4098277` — Dockerfile → melange/apko (+ keyless cosign, SBOM/provenance attest).
+- #26 `8d5007d` — provenance generated in an isolated reusable workflow (SLSA L3).
+Tooling migration + L3 are COMPLETE on master. ONLY remaining item: the
+throwaway-prerelease-tag rehearsal (validates melange/apko publish + cosign + the
+attest.yml L3 path together) before the first real release — not yet run; developer
+asked to pause. Session left clean (working tree clean; local master == origin).
