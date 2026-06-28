@@ -49,3 +49,24 @@ final coherence pass myself, then PR.
 
 Plan after drafts: apply verifier fixes, coherence/cross-reference pass, optional
 local sanity (skills are docs — no build needed), commit, open PR.
+
+## 2026-06-27 20:18 — Skills authored, verified, PR #35 opened
+Built three skills on branch `docs/tooling-skills`:
+`.agents/skills/{mise,melange,apko}/` each = `SKILL.md` + `references/<tool>-commands.md`
+(~1069 lines total). Workflow: 3 parallel authoring agents (grounded in a shared
+BRIEF + primary sources) → adversarial per-skill verification against live `--help`
++ repo config. Verdicts: melange/apko "ship", mise "fix-then-ship"; all findings
+minor/cosmetic and applied (mise: stack-up doesn't call melange directly, + the
+cache:false tasks wording; melange: security-scan single-key nuance; apko: `--sbom`
+toggle rendering + arch-suffix phrasing).
+
+Notable: the adversarial pass corrected errors in my own BRIEF — `mise.lock` gates
+on URL presence (not checksum), `sqlc` carries no upstream checksum (why the old
+`.moon/proto/sqlc.sha256` existed), and `provenance` is recorded on only a subset
+(uv/golangci-lint/python = github-attestations, cosign = cosign; the rest none).
+The skills followed the primary source over the brief — exactly the intended guard.
+
+No code/config changed (docs only). Deliberately NOT added to `.journal/SKILLS.md`
+(task-specific, not always-required). CI expected to be a near no-op (moon affected-
+gating: a `.agents/**`-only diff touches no Go inputs). Next: human review/merge of
+PR #35, then worktree cleanup (`wt remove docs/tooling-skills`).
