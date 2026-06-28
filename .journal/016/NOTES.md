@@ -28,3 +28,24 @@ Current state of the world:
 
 Plan: wait for the developer's actual request, then refine this session's title
 and scope.
+
+## 2026-06-27 20:05 — Goal stated: author mise/melange/apko skills
+Developer's request: create three focused agent skills under `.agents/skills` —
+**mise**, **melange**, **apko**. Requirements: less tool-introduction, more
+repo-specific usage + non-obvious operations; reinforce disciplined usage (e.g.
+"mise owns the lifecycle of all tooling and nothing else"); and embed accurate
+command/flag REFERENCE material to prevent hallucination. Mirror the existing
+`git`/`worktrunk` skill structure (SKILL.md + references/<tool>-commands.md).
+
+Approach (ultracode): implementation worktree `docs/tooling-skills` off master.
+Gathered primary sources first — verbatim `--help` for the pinned versions (mise
+2026.6.14, melange v0.54.0, apko v1.2.19, cosign v3.1.1) captured to scratchpad,
+plus all repo wiring (mise.toml/lock, melange.yaml, apko.yaml, moon.yml,
+compose.yaml, release.yml, attest.yml, ci.yml, security-scan.yml, README). Wrote
+a single authoritative BRIEF (house style + primary-source index + per-tool fact
+sheets). Running a Workflow: author each skill (parallel, grounded) → adversarial
+accuracy verify per skill against live `--help` + repo files. Then integrate +
+final coherence pass myself, then PR.
+
+Plan after drafts: apply verifier fixes, coherence/cross-reference pass, optional
+local sanity (skills are docs — no build needed), commit, open PR.
