@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/meigma/template-go-api/compare/v1.0.4...v1.1.0) (2026-07-19)
+
+
+### Features
+
+* **session:** improve concurrent journal coordination ([#46](https://github.com/meigma/template-go-api/issues/46)) ([1131978](https://github.com/meigma/template-go-api/commit/1131978f15a294114fe3cdd97f4faa069938c0bc))
+
 ## [1.0.4](https://github.com/meigma/template-go-api/compare/v1.0.3...v1.0.4) (2026-06-28)
 
 
