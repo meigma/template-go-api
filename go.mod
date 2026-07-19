@@ -6,7 +6,7 @@ require (
 	github.com/cedar-policy/cedar-go v1.8.0
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/exaring/otelpgx v0.11.1
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/cors v1.2.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
