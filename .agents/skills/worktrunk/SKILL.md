@@ -29,7 +29,12 @@ Ground advice in the official docs and the local CLI help, not memory.
 
 ## Default stance
 
-1. Give each user or agent its own branch and worktree. Do not share a working directory.
+1. Give each user or agent its own implementation branch and worktree. Do not share an
+   implementation working directory. The exact `journal/<current-gh-login>` worktree
+   governed by `.session.md` is the deliberate exception: the current user's concurrent
+   agents share it while owning disjoint journal write sets. Other `journal/<login>`
+   worktrees are read-only peer references; only `journal-sync` may materialize or
+   fast-forward them.
 2. Use `wt` for creation, switching, inspection, and cleanup so naming, hooks, and lifecycle
    stay consistent.
 3. Prefer remote PR flow for integration:
@@ -45,7 +50,12 @@ Ground advice in the official docs and the local CLI help, not memory.
 
 - Before creating a branch, inspect existing worktrees first.
 - Never assume your current directory is isolated. Verify it.
-- Do not reuse another agent's worktree unless the user explicitly asks for that handoff.
+- Do not reuse another agent's implementation worktree unless the user explicitly asks for
+  that handoff. Sharing a personal journal worktree is allowed only under the scoped
+  ownership rules in `.session.md`.
+- Resolve the current GitHub login before treating any journal worktree as personal. Never
+  write lifecycle state in, reuse, or repurpose a peer's `journal/<other-login>` worktree;
+  ordinary agents may only read it for context, and only `journal-sync` may update it.
 - Avoid interactive picker flows in automation; prefer explicit branch names and JSON output.
 - If shell integration is not installed, `wt switch` cannot change the parent shell's
   directory. Run `wt config shell install` once per machine, or use `--no-cd` plus the
@@ -88,6 +98,10 @@ Look for:
 If the target branch already has a live worktree, treat that as owned until the user says
 otherwise.
 
+For journal branches, ownership is determined by the exact current GitHub login, not by
+which journal worktree happens to be current. A peer journal worktree remains a read-only
+reference even when the agent starts inside it.
+
 ### 2. Create an isolated worktree
 
 Use a unique branch name. Good patterns include ticket IDs or explicit agent prefixes.
@@ -119,6 +133,10 @@ Once the worktree exists:
 - commit there
 - avoid switching the branch in-place with `git switch` unless the user explicitly wants to
   repurpose that worktree
+
+These edit rules apply to implementation worktrees and to the current user's personal
+journal under `.session.md`. Never perform implementation or lifecycle work in a peer
+journal worktree; peer journals are reference-only outside `journal-sync` fast-forwards.
 
 Optional coordination helpers:
 
@@ -174,6 +192,11 @@ wt remove feature/some-task
 wt step prune --dry-run
 wt step prune
 ```
+
+Routine implementation cleanup must exclude every `journal/*` worktree. Do not reuse,
+repurpose, or remove peer journal worktrees, and do not run `wt step prune` when its dry run
+would remove one. The session protocol manages the current user's journal, while
+`journal-sync` manages peer reference worktrees.
 
 Important details:
 

@@ -47,6 +47,9 @@ Branch shortcuts:
 Notes:
 
 - With no branch argument, `wt switch` opens an interactive picker.
+- After remotes have been fetched, an explicit `wt switch <branch>` also works when the
+  branch exists only on a single remote: Worktrunk creates the local tracking branch and its
+  worktree. Do not pass `--create` for that case.
 - `pr:<N>` requires `gh`; `mr:<N>` requires `glab`.
 - For automation, prefer explicit branch names or `--format=json`.
 
