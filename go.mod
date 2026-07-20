@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/cedar-policy/cedar-go v1.8.0
-	github.com/danielgtaylor/huma/v2 v2.38.0
+	github.com/danielgtaylor/huma/v2 v2.39.0
 	github.com/exaring/otelpgx v0.11.1
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/cors v1.2.2
@@ -55,7 +55,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
